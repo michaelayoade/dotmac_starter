@@ -18,30 +18,3 @@ from app.models.rbac import Permission, PersonRole, Role, RolePermission  # noqa
 from app.models.scheduler import ScheduleType, ScheduledTask  # noqa: F401
 from app.models.file_upload import FileUpload, FileUploadStatus  # noqa: F401
 from app.models.notification import Notification, NotificationType  # noqa: F401
-from app.models.billing import (  # noqa: F401
-    BillingScheme,
-    Coupon,
-    CouponDuration,
-    Customer,
-    Discount,
-    Entitlement,
-    EntitlementValueType,
-    Invoice,
-    InvoiceItem,
-    InvoiceStatus,
-    PaymentIntent,
-    PaymentIntentStatus,
-    PaymentMethod,
-    PaymentMethodType,
-    Price,
-    PriceType,
-    Product,
-    RecurringInterval,
-    Subscription,
-    SubscriptionItem,
-    SubscriptionStatus,
-    UsageAction,
-    UsageRecord,
-    WebhookEvent,
-    WebhookEventStatus,
-)
