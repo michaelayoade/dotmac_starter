@@ -26,6 +26,7 @@ from app.config import settings, validate_settings
 from app.db import SessionLocal
 from app.errors import register_error_handlers
 from app.logging import configure_logging
+from app.middleware.csrf import CSRFMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.models.domain_settings import DomainSetting, SettingDomain
@@ -95,6 +96,7 @@ if cors_origins:
     )
 
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(CSRFMiddleware)
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(ObservabilityMiddleware)
 
