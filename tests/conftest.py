@@ -153,24 +153,14 @@ def auth_env():
 def client(db_session):
     """Create a test client with database dependency override."""
     from app.main import app
-    from app.api.persons import get_db as persons_get_db
-    from app.api.auth_flow import get_db as auth_flow_get_db
-    from app.api.rbac import get_db as rbac_get_db
-    from app.api.audit import get_db as audit_get_db
-    from app.api.settings import get_db as settings_get_db
-    from app.api.scheduler import get_db as scheduler_get_db
+    from app.api.deps import get_db as api_get_db
     from app.services.auth_dependencies import _get_db as auth_deps_get_db
 
     def override_get_db():
         yield db_session
 
-    # Override all get_db dependencies
-    app.dependency_overrides[persons_get_db] = override_get_db
-    app.dependency_overrides[auth_flow_get_db] = override_get_db
-    app.dependency_overrides[rbac_get_db] = override_get_db
-    app.dependency_overrides[audit_get_db] = override_get_db
-    app.dependency_overrides[settings_get_db] = override_get_db
-    app.dependency_overrides[scheduler_get_db] = override_get_db
+    # Override shared db dependencies
+    app.dependency_overrides[api_get_db] = override_get_db
     app.dependency_overrides[auth_deps_get_db] = override_get_db
 
     with TestClient(app, raise_server_exceptions=False) as test_client:

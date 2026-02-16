@@ -2,27 +2,26 @@ import hashlib
 import os
 import secrets
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from fastapi import HTTPException, Request
 import redis
-from sqlalchemy.orm import Session
+from fastapi import HTTPException, Request
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from app.models.auth import (
     ApiKey,
     AuthProvider,
     MFAMethod,
     MFAMethodType,
-    Session as AuthSession,
     SessionStatus,
     UserCredential,
 )
-from app.services.common import coerce_uuid
-from app.services.response import ListResponseMixin
+from app.models.auth import (
+    Session as AuthSession,
+)
 from app.models.domain_settings import DomainSetting, SettingDomain
 from app.models.person import Person
-from app.services import settings_spec
 from app.schemas.auth import (
     ApiKeyCreate,
     ApiKeyGenerateRequest,
@@ -34,22 +33,10 @@ from app.schemas.auth import (
     UserCredentialCreate,
     UserCredentialUpdate,
 )
-
-
-def _apply_ordering(query, order_by, order_dir, allowed_columns):
-    if order_by not in allowed_columns:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid order_by. Allowed: {', '.join(sorted(allowed_columns))}",
-        )
-    column = allowed_columns[order_by]
-    if order_dir == "desc":
-        return query.order_by(column.desc())
-    return query.order_by(column.asc())
-
-
-def _apply_pagination(query, limit, offset):
-    return query.limit(limit).offset(offset)
+from app.services import settings_spec
+from app.services.common import coerce_uuid
+from app.services.query_utils import apply_ordering, apply_pagination, validate_enum
+from app.services.response import ListResponseMixin
 
 
 def hash_api_key(value: str) -> str:
@@ -103,16 +90,6 @@ def _get_redis_client() -> redis.Redis | None:
     except redis.RedisError:
         return None
 
-
-def _validate_enum(value, enum_cls, label):
-    if value is None:
-        return None
-    try:
-        return enum_cls(value)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid {label}") from exc
-
-
 def _ensure_person(db: Session, person_id: str):
     person = db.get(Person, coerce_uuid(person_id))
     if not person:
@@ -130,7 +107,7 @@ class UserCredentials(ListResponseMixin):
                 db, SettingDomain.auth, "default_auth_provider"
             )
             if default_provider:
-                data["provider"] = _validate_enum(
+                data["provider"] = validate_enum(
                     default_provider, AuthProvider, "provider"
                 )
         credential = UserCredential(**data)
@@ -163,13 +140,13 @@ class UserCredentials(ListResponseMixin):
         if provider:
             query = query.filter(
                 UserCredential.provider
-                == _validate_enum(provider, AuthProvider, "provider")
+                == validate_enum(provider, AuthProvider, "provider")
             )
         if is_active is None:
             query = query.filter(UserCredential.is_active.is_(True))
         else:
             query = query.filter(UserCredential.is_active == is_active)
-        query = _apply_ordering(
+        query = apply_ordering(
             query,
             order_by,
             order_dir,
@@ -179,7 +156,7 @@ class UserCredentials(ListResponseMixin):
                 "last_login_at": UserCredential.last_login_at,
             },
         )
-        return _apply_pagination(query, limit, offset).all()
+        return apply_pagination(query, limit, offset).all()
 
     @staticmethod
     def update(db: Session, credential_id: str, payload: UserCredentialUpdate):
@@ -252,7 +229,7 @@ class MFAMethods(ListResponseMixin):
         if method_type:
             query = query.filter(
                 MFAMethod.method_type
-                == _validate_enum(method_type, MFAMethodType, "method_type")
+                == validate_enum(method_type, MFAMethodType, "method_type")
             )
         if is_primary is not None:
             query = query.filter(MFAMethod.is_primary == is_primary)
@@ -262,7 +239,7 @@ class MFAMethods(ListResponseMixin):
             query = query.filter(MFAMethod.is_active.is_(True))
         else:
             query = query.filter(MFAMethod.is_active == is_active)
-        query = _apply_ordering(
+        query = apply_ordering(
             query,
             order_by,
             order_dir,
@@ -272,7 +249,7 @@ class MFAMethods(ListResponseMixin):
                 "is_primary": MFAMethod.is_primary,
             },
         )
-        return _apply_pagination(query, limit, offset).all()
+        return apply_pagination(query, limit, offset).all()
 
     @staticmethod
     def update(db: Session, method_id: str, payload: MFAMethodUpdate):
@@ -347,9 +324,9 @@ class Sessions(ListResponseMixin):
         if status:
             query = query.filter(
                 AuthSession.status
-                == _validate_enum(status, SessionStatus, "status")
+                == validate_enum(status, SessionStatus, "status")
             )
-        query = _apply_ordering(
+        query = apply_ordering(
             query,
             order_by,
             order_dir,
@@ -359,7 +336,7 @@ class Sessions(ListResponseMixin):
                 "status": AuthSession.status,
             },
         )
-        return _apply_pagination(query, limit, offset).all()
+        return apply_pagination(query, limit, offset).all()
 
     @staticmethod
     def update(db: Session, session_id: str, payload: SessionUpdate):
@@ -381,7 +358,7 @@ class Sessions(ListResponseMixin):
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         session.status = SessionStatus.revoked
-        session.revoked_at = datetime.now(timezone.utc)
+        session.revoked_at = datetime.now(UTC)
         db.commit()
 
 
@@ -469,13 +446,13 @@ class ApiKeys(ListResponseMixin):
             query = query.filter(ApiKey.is_active.is_(True))
         else:
             query = query.filter(ApiKey.is_active == is_active)
-        query = _apply_ordering(
+        query = apply_ordering(
             query,
             order_by,
             order_dir,
             {"created_at": ApiKey.created_at, "label": ApiKey.label},
         )
-        return _apply_pagination(query, limit, offset).all()
+        return apply_pagination(query, limit, offset).all()
 
     @staticmethod
     def update(db: Session, key_id: str, payload: ApiKeyUpdate):
@@ -499,7 +476,7 @@ class ApiKeys(ListResponseMixin):
         if not api_key:
             raise HTTPException(status_code=404, detail="API key not found")
         api_key.is_active = False
-        api_key.revoked_at = datetime.now(timezone.utc)
+        api_key.revoked_at = datetime.now(UTC)
         db.commit()
 
     @staticmethod

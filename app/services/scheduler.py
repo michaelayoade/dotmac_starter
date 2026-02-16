@@ -4,23 +4,8 @@ from sqlalchemy.orm import Session
 from app.models.scheduler import ScheduledTask, ScheduleType
 from app.schemas.scheduler import ScheduledTaskCreate, ScheduledTaskUpdate
 from app.services.common import coerce_uuid
+from app.services.query_utils import apply_ordering, apply_pagination
 from app.services.response import ListResponseMixin
-
-
-def _apply_ordering(query, order_by, order_dir, allowed_columns):
-    if order_by not in allowed_columns:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid order_by. Allowed: {', '.join(sorted(allowed_columns))}",
-        )
-    column = allowed_columns[order_by]
-    if order_dir == "desc":
-        return query.order_by(column.desc())
-    return query.order_by(column.asc())
-
-
-def _apply_pagination(query, limit, offset):
-    return query.limit(limit).offset(offset)
 
 
 def _validate_schedule_type(value):
@@ -64,13 +49,13 @@ class ScheduledTasks(ListResponseMixin):
         query = db.query(ScheduledTask)
         if enabled is not None:
             query = query.filter(ScheduledTask.enabled == enabled)
-        query = _apply_ordering(
+        query = apply_ordering(
             query,
             order_by,
             order_dir,
             {"created_at": ScheduledTask.created_at, "name": ScheduledTask.name},
         )
-        return _apply_pagination(query, limit, offset).all()
+        return apply_pagination(query, limit, offset).all()
 
     @staticmethod
     def update(db: Session, task_id: str, payload: ScheduledTaskUpdate):

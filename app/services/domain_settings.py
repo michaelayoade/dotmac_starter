@@ -1,27 +1,11 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.models.domain_settings import DomainSetting, SettingDomain
-from app.models.domain_settings import SettingValueType
+from app.models.domain_settings import DomainSetting, SettingDomain, SettingValueType
 from app.schemas.settings import DomainSettingCreate, DomainSettingUpdate
 from app.services.common import coerce_uuid
+from app.services.query_utils import apply_ordering, apply_pagination
 from app.services.response import ListResponseMixin
-
-
-def _apply_ordering(query, order_by, order_dir, allowed_columns):
-    if order_by not in allowed_columns:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid order_by. Allowed: {', '.join(sorted(allowed_columns))}",
-        )
-    column = allowed_columns[order_by]
-    if order_dir == "desc":
-        return query.order_by(column.desc())
-    return query.order_by(column.asc())
-
-
-def _apply_pagination(query, limit, offset):
-    return query.limit(limit).offset(offset)
 
 
 class DomainSettings(ListResponseMixin):
@@ -70,13 +54,13 @@ class DomainSettings(ListResponseMixin):
             query = query.filter(DomainSetting.is_active.is_(True))
         else:
             query = query.filter(DomainSetting.is_active == is_active)
-        query = _apply_ordering(
+        query = apply_ordering(
             query,
             order_by,
             order_dir,
             {"created_at": DomainSetting.created_at, "key": DomainSetting.key},
         )
-        return _apply_pagination(query, limit, offset).all()
+        return apply_pagination(query, limit, offset).all()
 
     def update(self, db: Session, setting_id: str, payload: DomainSettingUpdate):
         setting = db.get(DomainSetting, coerce_uuid(setting_id))

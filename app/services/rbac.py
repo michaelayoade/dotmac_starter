@@ -14,23 +14,8 @@ from app.schemas.rbac import (
     RoleUpdate,
 )
 from app.services.common import coerce_uuid
+from app.services.query_utils import apply_ordering, apply_pagination
 from app.services.response import ListResponseMixin
-
-
-def _apply_ordering(query, order_by, order_dir, allowed_columns):
-    if order_by not in allowed_columns:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid order_by. Allowed: {', '.join(sorted(allowed_columns))}",
-        )
-    column = allowed_columns[order_by]
-    if order_dir == "desc":
-        return query.order_by(column.desc())
-    return query.order_by(column.asc())
-
-
-def _apply_pagination(query, limit, offset):
-    return query.limit(limit).offset(offset)
 
 
 class Roles(ListResponseMixin):
@@ -63,13 +48,13 @@ class Roles(ListResponseMixin):
             query = query.filter(Role.is_active.is_(True))
         else:
             query = query.filter(Role.is_active == is_active)
-        query = _apply_ordering(
+        query = apply_ordering(
             query,
             order_by,
             order_dir,
             {"created_at": Role.created_at, "name": Role.name},
         )
-        return _apply_pagination(query, limit, offset).all()
+        return apply_pagination(query, limit, offset).all()
 
     @staticmethod
     def update(db: Session, role_id: str, payload: RoleUpdate):
@@ -121,13 +106,13 @@ class Permissions(ListResponseMixin):
             query = query.filter(Permission.is_active.is_(True))
         else:
             query = query.filter(Permission.is_active == is_active)
-        query = _apply_ordering(
+        query = apply_ordering(
             query,
             order_by,
             order_dir,
             {"created_at": Permission.created_at, "key": Permission.key},
         )
-        return _apply_pagination(query, limit, offset).all()
+        return apply_pagination(query, limit, offset).all()
 
     @staticmethod
     def update(db: Session, permission_id: str, payload: PermissionUpdate):
@@ -186,13 +171,13 @@ class RolePermissions(ListResponseMixin):
             query = query.filter(RolePermission.role_id == coerce_uuid(role_id))
         if permission_id:
             query = query.filter(RolePermission.permission_id == coerce_uuid(permission_id))
-        query = _apply_ordering(
+        query = apply_ordering(
             query,
             order_by,
             order_dir,
             {"role_id": RolePermission.role_id},
         )
-        return _apply_pagination(query, limit, offset).all()
+        return apply_pagination(query, limit, offset).all()
 
     @staticmethod
     def update(db: Session, link_id: str, payload: RolePermissionUpdate):
@@ -260,13 +245,13 @@ class PersonRoles(ListResponseMixin):
             query = query.filter(PersonRole.person_id == coerce_uuid(person_id))
         if role_id:
             query = query.filter(PersonRole.role_id == coerce_uuid(role_id))
-        query = _apply_ordering(
+        query = apply_ordering(
             query,
             order_by,
             order_dir,
             {"assigned_at": PersonRole.assigned_at},
         )
-        return _apply_pagination(query, limit, offset).all()
+        return apply_pagination(query, limit, offset).all()
 
     @staticmethod
     def update(db: Session, link_id: str, payload: PersonRoleUpdate):

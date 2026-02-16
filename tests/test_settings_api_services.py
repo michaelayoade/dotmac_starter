@@ -14,11 +14,11 @@ class _ListResponseStub(ListResponseMixin):
 
 def test_list_response_mixin_requires_limit_offset(db_session):
     with pytest.raises(ValueError, match="limit and offset are required"):
-        _ListResponseStub.list_response(db_session)
+        _ListResponseStub().list_response(db_session)
 
 
 def test_list_response_mixin_with_args(db_session):
-    response = _ListResponseStub.list_response(db_session, None, None, 2, 0)
+    response = _ListResponseStub().list_response(db_session, None, None, 2, 0)
     assert response["count"] == 2
     assert response["limit"] == 2
     assert response["offset"] == 0

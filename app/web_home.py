@@ -2,36 +2,18 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_db
 from app.config import settings
-from app.db import SessionLocal
 from app.services import person as person_service
-from app.services.branding import (
-    generate_css,
-    get_branding,
-    google_fonts_url,
-    save_branding,
-)
+from app.services.branding import save_branding
 from app.services.branding_assets import delete_branding_asset, save_branding_asset
+from app.services.branding_context import (
+    branding_context_from_values,
+    load_branding_context,
+)
 from app.templates import templates
 
 router = APIRouter()
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-def _brand_mark(name: str) -> str:
-    parts = [part for part in name.split() if part]
-    if not parts:
-        return "ST"
-    if len(parts) == 1:
-        return parts[0][:2].upper()
-    return (parts[0][0] + parts[1][0]).upper()
 
 
 @router.get("/", tags=["web"], response_class=HTMLResponse)
@@ -61,27 +43,16 @@ def home(
     total_people = db.query(person_service.Person).count()
     total_pages = max(1, (total_people + limit - 1) // limit)
 
-    branding = get_branding(db)
+    branding_ctx = load_branding_context(db)
     brand_name = settings.brand_name
-    brand = {
-        "name": branding.get("display_name") or brand_name,
-        "tagline": branding.get("tagline") or settings.brand_tagline,
-        "logo_url": branding.get("logo_url") or settings.brand_logo_url,
-        "logo_dark_url": branding.get("logo_dark_url"),
-        "mark": branding.get("brand_mark") or _brand_mark(brand_name),
-    }
-    org_branding = {
-        "css": generate_css(branding),
-        "fonts_url": google_fonts_url(branding),
-    }
     return templates.TemplateResponse(
         "index.html",
         {
             "request": request,
             "title": brand_name,
             "people": people,
-            "brand": brand,
-            "org_branding": org_branding,
+            "brand": branding_ctx["brand"],
+            "org_branding": branding_ctx["org_branding"],
             "sort": order_by,
             "dir": order_dir,
             "page": page,
@@ -93,25 +64,15 @@ def home(
 
 @router.get("/settings/branding", tags=["web"], response_class=HTMLResponse)
 def branding_settings(request: Request, db: Session = Depends(get_db)):
-    branding = get_branding(db)
-    brand = {
-        "name": branding.get("display_name") or settings.brand_name,
-        "tagline": branding.get("tagline") or settings.brand_tagline,
-        "logo_url": branding.get("logo_url") or settings.brand_logo_url,
-        "logo_dark_url": branding.get("logo_dark_url"),
-        "mark": branding.get("brand_mark") or _brand_mark(settings.brand_name),
-    }
+    branding_ctx = load_branding_context(db)
     return templates.TemplateResponse(
         "branding.html",
         {
             "request": request,
             "title": "Branding Settings",
-            "branding": branding,
-            "brand": brand,
-            "org_branding": {
-                "css": generate_css(branding),
-                "fonts_url": google_fonts_url(branding),
-            },
+            "branding": branding_ctx["branding"],
+            "brand": branding_ctx["brand"],
+            "org_branding": branding_ctx["org_branding"],
         },
     )
 
@@ -120,7 +81,8 @@ def branding_settings(request: Request, db: Session = Depends(get_db)):
 async def branding_settings_update(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
     data = dict(form)
-    branding = get_branding(db)
+    branding_ctx = load_branding_context(db)
+    branding = branding_ctx["branding"]
 
     logo_file = form.get("logo_file")
     logo_dark_file = form.get("logo_dark_file")
@@ -162,24 +124,15 @@ async def branding_settings_update(request: Request, db: Session = Depends(get_d
         "logo_dark_url": data.get("logo_dark_url", branding.get("logo_dark_url")),
     }
     saved = save_branding(db, payload)
-    brand = {
-        "name": saved.get("display_name") or settings.brand_name,
-        "tagline": saved.get("tagline") or settings.brand_tagline,
-        "logo_url": saved.get("logo_url") or settings.brand_logo_url,
-        "logo_dark_url": saved.get("logo_dark_url"),
-        "mark": saved.get("brand_mark") or _brand_mark(settings.brand_name),
-    }
+    saved_ctx = branding_context_from_values(saved)
     return templates.TemplateResponse(
         "branding.html",
         {
             "request": request,
             "title": "Branding Settings",
             "branding": saved,
-            "brand": brand,
+            "brand": saved_ctx["brand"],
             "success": True,
-            "org_branding": {
-                "css": generate_css(saved),
-                "fonts_url": google_fonts_url(saved),
-            },
+            "org_branding": saved_ctx["org_branding"],
         },
     )
