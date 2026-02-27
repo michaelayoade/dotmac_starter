@@ -56,7 +56,7 @@
     {% if event.details %}
     <div class="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
         <label class="block text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Details</label>
-        <pre class="p-4 rounded-lg bg-slate-50 dark:bg-slate-900 text-sm text-slate-800 dark:text-slate-200 overflow-x-auto font-mono">{{ event.details | tojson(indent=2) | safe }}</pre>
+        <pre class="p-4 rounded-lg bg-slate-50 dark:bg-slate-900 text-sm text-slate-800 dark:text-slate-200 overflow-x-auto font-mono">{{ event.details | tojson(indent=2) }}</pre>
     </div>
     {% endif %}
 
