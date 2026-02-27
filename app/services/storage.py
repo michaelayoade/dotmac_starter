@@ -71,8 +71,22 @@ class LocalStorage(StorageBackend):
         """Resolve and validate a path to prevent directory traversal."""
         base = self.base_dir.resolve()
         target = (base / storage_key).resolve()
-        if not str(target).startswith(str(base) + os.sep) and target != base:
-            return None
+        
+        # Backward-compatible path traversal check
+        try:
+            # Python 3.9+
+            if not target.is_relative_to(base):
+                return None
+        except AttributeError:
+            # Python 3.8 and earlier
+            # Use os.path.commonpath for reliable traversal detection
+            try:
+                common = os.path.commonpath([str(base), str(target)])
+                if os.path.commonpath([str(base)]) != common:
+                    return None
+            except ValueError:
+                return None
+        
         return target
 
 

@@ -1,0 +1,7 @@
+def _resolve_path(self, storage_key: str) -> Path | None:
+    """Resolve and validate a path to prevent directory traversal."""
+    base = self.base_dir.resolve()
+    target = (base / storage_key).resolve()
+    if not str(target).startswith(str(base) + os.sep) and target != base:
+        return None
+    return target
