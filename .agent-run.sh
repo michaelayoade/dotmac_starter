@@ -3,16 +3,16 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 
 # ---- Injected at spawn time ----
-WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-1-v2
+WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-deps-6
 PROJECT_DIR=/home/dotmac/projects/dotmac_starter
-SCRIPT_DIR=/home/dotmac/projects/dotmac_starter/scripts
+SCRIPT_DIR=/home/dotmac/.seabone/scripts
 ACTIVE_FILE=/home/dotmac/projects/dotmac_starter/.seabone/active-tasks.json
-LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-1-v2.log
-TASK_ID=fix-security-c1-1-v2
-DESCRIPTION=Add\ .env.agent-swarm\ to\ .gitignore.\ The\ file\ .env.agent-swarm\ contains\ live\ credentials\ \(DeepSeek\ API\ key\,\ Telegram\ bot\ token\ +\ chat\ ID\)\ and\ is\ NOT\ listed\ in\ .gitignore\ —\ this\ is\ a\ CRITICAL\ security\ issue.\ Steps:\ \(1\)\ Read\ .gitignore\ to\ see\ the\ current\ .env\ patterns\ \(around\ line\ 38-39\).\ \(2\)\ Add\ a\ single\ new\ line\ \'.env.agent-swarm\'\ in\ the\ .env\ section\ of\ .gitignore\,\ right\ after\ the\ existing\ .env.\*.local\ line.\ \(3\)\ Verify\ the\ change\ by\ reading\ .gitignore\ again\ and\ confirming\ the\ line\ is\ present.\ Modify\ ONLY\ .gitignore.\ Do\ NOT\ create\ any\ other\ files.\ Do\ NOT\ commit\ .agent-run.sh\ or\ any\ other\ file.\ Run:\ git\ diff\ .gitignore\ to\ confirm\ the\ change\ is\ correct.
-BRANCH=agent/fix-security-c1-1-v2
-ENGINE=codex
-MODEL=gpt-5.3-codex
+LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-deps-6.log
+TASK_ID=fix-deps-6
+DESCRIPTION=Bump\ opentelemetry\ packages\ from\ 0.47b0\ beta\ to\ \>=0.50b0\ stable\ beta\,\ with\ matching\ opentelemetry-api/sdk\ \>=1.29.0.\ Steps:\ \(1\)\ In\ pyproject.toml\,\ update:\ opentelemetry-api\>=1.29.0\,\ opentelemetry-sdk\>=1.29.0\,\ opentelemetry-instrumentation-fastapi\>=0.50b0\,\ opentelemetry-instrumentation-sqlalchemy\>=0.50b0\,\ opentelemetry-instrumentation-celery\>=0.50b0\,\ and\ opentelemetry-exporter-otlp\ if\ present.\ \(2\)\ Run\ \'poetry\ update\ opentelemetry-api\ opentelemetry-sdk\ opentelemetry-instrumentation-fastapi\ opentelemetry-instrumentation-sqlalchemy\ opentelemetry-instrumentation-celery\'.\ \(3\)\ Run\ \'make\ lint\'\ and\ \'pytest\ tests/\ -x\ --tb=short\'.\ Modify\ ONLY\ pyproject.toml.\ Do\ NOT\ create\ any\ other\ files.
+BRANCH=agent/fix-deps-6
+ENGINE=aider
+MODEL=deepseek-chat
 EVENT_LOG=/home/dotmac/projects/dotmac_starter/.seabone/logs/events.log
 CONFIG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/config.json
 PROJECT_NAME=dotmac_starter
@@ -75,13 +75,11 @@ if [[ "$ENGINE" == "claude" ]]; then
 elif [[ "$ENGINE" == "claude-frontend" ]]; then
     echo "[RUN] Claude Frontend Design Specialist..."
 
-    # Load the frontend design system prompt
     FRONTEND_PROMPT=""
     if [[ -f "$PROMPTS_DIR/frontend-design.md" ]]; then
         FRONTEND_PROMPT=$(cat "$PROMPTS_DIR/frontend-design.md")
     fi
 
-    # Build the full prompt: system context + task
     FULL_TASK="$FRONTEND_PROMPT
 
 ---
@@ -141,7 +139,6 @@ elif [[ "$ENGINE" == "codex" ]]; then
 elif [[ "$ENGINE" == "codex-test" ]]; then
     echo "[RUN] Codex Testing Specialist..."
 
-    # Load the testing system prompt
     TEST_PROMPT=""
     if [[ -f "$PROMPTS_DIR/testing-agent.md" ]]; then
         TEST_PROMPT=$(cat "$PROMPTS_DIR/testing-agent.md")
@@ -184,19 +181,15 @@ ${DESCRIPTION}
 elif [[ "$ENGINE" == "codex-senior" ]]; then
     echo "[RUN] Codex Senior Dev (Escalation)..."
 
-    # Load the senior dev system prompt
     SENIOR_PROMPT=""
     if [[ -f "$PROMPTS_DIR/senior-dev.md" ]]; then
         SENIOR_PROMPT=$(cat "$PROMPTS_DIR/senior-dev.md")
     fi
 
-    # Check for previous agent logs to provide context
     PREV_LOG_CONTEXT=""
-    # Extract base task ID (strip -v2, -v3 suffixes for escalation lookups)
     BASE_TASK_ID=$(echo "$TASK_ID" | sed -E 's/-v[0-9]+$//')
     for prev_log in "$LOG_DIR/${BASE_TASK_ID}"*.log; do
         if [[ -f "$prev_log" && "$prev_log" != "$LOG_FILE" ]]; then
-            # Get last 80 lines of previous attempts
             PREV_LOG_CONTEXT="${PREV_LOG_CONTEXT}
 
 --- Previous attempt log: $(basename "$prev_log") ---
