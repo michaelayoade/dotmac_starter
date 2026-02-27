@@ -50,6 +50,12 @@ def _login_error(request: Request, db: Session, message: str, next_url: str) -> 
     )
 
 
+def _safe_next_url(url: str) -> str:
+    if url.startswith("/") and not url.startswith("//") and "://" not in url:
+        return url
+    return "/admin"
+
+
 @router.post("/login", response_model=None)
 async def login_submit(
     request: Request,
@@ -58,7 +64,7 @@ async def login_submit(
     form = await request.form()
     username = str(form.get("username", "")).strip()
     password = str(form.get("password", ""))
-    next_url = str(form.get("next", "/admin"))
+    next_url = _safe_next_url(str(form.get("next", "/admin")))
 
     if not username or not password:
         return _login_error(request, db, "Username and password are required", next_url)

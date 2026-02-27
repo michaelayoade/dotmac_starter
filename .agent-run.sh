@@ -3,16 +3,16 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 
 # ---- Injected at spawn time ----
-WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-5
+WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-3-v2
 PROJECT_DIR=/home/dotmac/projects/dotmac_starter
-SCRIPT_DIR=/home/dotmac/.seabone/scripts
+SCRIPT_DIR=/home/dotmac/projects/dotmac_starter/scripts
 ACTIVE_FILE=/home/dotmac/projects/dotmac_starter/.seabone/active-tasks.json
-LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-5.log
-TASK_ID=fix-security-c1-5
-DESCRIPTION=Remove\ unnecessary\ \'\|\ safe\'\ from\ tojson\ expressions\ in\ two\ admin\ templates.\ The\ \'\|\ safe\'\ filter\ is\ redundant\ and\ harmful\ after\ tojson\ because\ tojson\ already\ HTML-encodes\ output\,\ and\ \'\|\ safe\'\ suppresses\ Jinja2\ auto-escaping.\ Fix\ both\ files:\ \(1\)\ templates/admin/audit/detail.html\ line\ ~59\ —\ change\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \}\}\'\;\ \(2\)\ templates/admin/billing/webhook_events/detail.html\ line\ ~60\ —\ change\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \}\}\'.\ This\ covers\ findings\ security-c1-5\ and\ security-c1-6.
-BRANCH=agent/fix-security-c1-5
-ENGINE=aider
-MODEL=deepseek-chat
+LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-3-v2.log
+TASK_ID=fix-security-c1-3-v2
+DESCRIPTION=Fix\ open\ redirect\ vulnerability\ at\ the\ CORRECT\ location:\ app/web/auth.py\ login_submit\ function.\ The\ real\ bug\ is\ at\ app/web/auth.py\ around\ line\ 82\ —\ NOT\ in\ app/main.py.\ The\ login_submit\ function\ reads\ \'next_url\ =\ str\(form.get\(\"next\"\,\ \"/admin\"\)\)\'\ and\ uses\ it\ directly\ as\ \'RedirectResponse\(url=next_url\,\ status_code=302\)\'\ with\ no\ scheme\ or\ host\ validation.\ Steps:\ \(1\)\ Read\ app/web/auth.py\ completely\ to\ understand\ the\ full\ login_submit\ function.\ \(2\)\ Add\ a\ helper\ function\ _safe_next_url\(url:\ str\)\ -\>\ str\ that\ returns\ the\ input\ if\ it\ starts\ with\ \'/\'\ and\ does\ NOT\ start\ with\ \'//\'\ and\ does\ NOT\ contain\ \'://\'\,\ otherwise\ returns\ \'/admin\'.\ \(3\)\ Apply\ it:\ next_url\ =\ _safe_next_url\(str\(form.get\(\'next\'\,\ \'/admin\'\)\)\).\ \(4\)\ Do\ NOT\ touch\ app/main.py.\ \(5\)\ Modify\ ONLY\ app/web/auth.py.\ Do\ NOT\ create\ any\ other\ files.\ Run\ make\ lint\ and\ make\ type-check\ after\ changes.
+BRANCH=agent/fix-security-c1-3-v2
+ENGINE=codex
+MODEL=gpt-5.3-codex
 EVENT_LOG=/home/dotmac/projects/dotmac_starter/.seabone/logs/events.log
 CONFIG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/config.json
 PROJECT_NAME=dotmac_starter
@@ -75,11 +75,13 @@ if [[ "$ENGINE" == "claude" ]]; then
 elif [[ "$ENGINE" == "claude-frontend" ]]; then
     echo "[RUN] Claude Frontend Design Specialist..."
 
+    # Load the frontend design system prompt
     FRONTEND_PROMPT=""
     if [[ -f "$PROMPTS_DIR/frontend-design.md" ]]; then
         FRONTEND_PROMPT=$(cat "$PROMPTS_DIR/frontend-design.md")
     fi
 
+    # Build the full prompt: system context + task
     FULL_TASK="$FRONTEND_PROMPT
 
 ---
@@ -139,6 +141,7 @@ elif [[ "$ENGINE" == "codex" ]]; then
 elif [[ "$ENGINE" == "codex-test" ]]; then
     echo "[RUN] Codex Testing Specialist..."
 
+    # Load the testing system prompt
     TEST_PROMPT=""
     if [[ -f "$PROMPTS_DIR/testing-agent.md" ]]; then
         TEST_PROMPT=$(cat "$PROMPTS_DIR/testing-agent.md")
@@ -181,15 +184,19 @@ ${DESCRIPTION}
 elif [[ "$ENGINE" == "codex-senior" ]]; then
     echo "[RUN] Codex Senior Dev (Escalation)..."
 
+    # Load the senior dev system prompt
     SENIOR_PROMPT=""
     if [[ -f "$PROMPTS_DIR/senior-dev.md" ]]; then
         SENIOR_PROMPT=$(cat "$PROMPTS_DIR/senior-dev.md")
     fi
 
+    # Check for previous agent logs to provide context
     PREV_LOG_CONTEXT=""
+    # Extract base task ID (strip -v2, -v3 suffixes for escalation lookups)
     BASE_TASK_ID=$(echo "$TASK_ID" | sed -E 's/-v[0-9]+$//')
     for prev_log in "$LOG_DIR/${BASE_TASK_ID}"*.log; do
         if [[ -f "$prev_log" && "$prev_log" != "$LOG_FILE" ]]; then
+            # Get last 80 lines of previous attempts
             PREV_LOG_CONTEXT="${PREV_LOG_CONTEXT}
 
 --- Previous attempt log: $(basename "$prev_log") ---
