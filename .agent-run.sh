@@ -3,14 +3,14 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 
 # ---- Injected at spawn time ----
-WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-1-v2
+WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-deps-3
 PROJECT_DIR=/home/dotmac/projects/dotmac_starter
 SCRIPT_DIR=/home/dotmac/projects/dotmac_starter/scripts
 ACTIVE_FILE=/home/dotmac/projects/dotmac_starter/.seabone/active-tasks.json
-LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-1-v2.log
-TASK_ID=fix-security-c1-1-v2
-DESCRIPTION=Add\ .env.agent-swarm\ to\ .gitignore.\ The\ file\ .env.agent-swarm\ contains\ live\ credentials\ \(DeepSeek\ API\ key\,\ Telegram\ bot\ token\ +\ chat\ ID\)\ and\ is\ NOT\ listed\ in\ .gitignore\ —\ this\ is\ a\ CRITICAL\ security\ issue.\ Steps:\ \(1\)\ Read\ .gitignore\ to\ see\ the\ current\ .env\ patterns\ \(around\ line\ 38-39\).\ \(2\)\ Add\ a\ single\ new\ line\ \'.env.agent-swarm\'\ in\ the\ .env\ section\ of\ .gitignore\,\ right\ after\ the\ existing\ .env.\*.local\ line.\ \(3\)\ Verify\ the\ change\ by\ reading\ .gitignore\ again\ and\ confirming\ the\ line\ is\ present.\ Modify\ ONLY\ .gitignore.\ Do\ NOT\ create\ any\ other\ files.\ Do\ NOT\ commit\ .agent-run.sh\ or\ any\ other\ file.\ Run:\ git\ diff\ .gitignore\ to\ confirm\ the\ change\ is\ correct.
-BRANCH=agent/fix-security-c1-1-v2
+LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-deps-3.log
+TASK_ID=fix-deps-3
+DESCRIPTION=Bump\ cryptography\ from\ 42.0.8\ to\ \>=43.0.0\ in\ pyproject.toml.\ Versions\ 43.x+\ include\ security\ patches\ for\ RSA/EC\ operations\ and\ memory\ safety\ issues\ in\ OpenSSL\ bindings.\ Steps:\ \(1\)\ In\ pyproject.toml\,\ change\ the\ cryptography\ constraint\ to\ \'\>=43.0.0\'.\ \(2\)\ Run\ \'poetry\ update\ cryptography\'.\ \(3\)\ Check\ for\ any\ cryptography\ API\ changes:\ grep\ -r\ \'from\ cryptography\'\ app/\ --\ verify\ APIs\ still\ valid.\ \(4\)\ Run\ \'make\ lint\'\,\ \'poetry\ run\ mypy\ app/\ --ignore-missing-imports\'\,\ \'pytest\ tests/\ -x\ --tb=short\'.\ Modify\ ONLY\ pyproject.toml\ \(and\ any\ call\ sites\ that\ break\ due\ to\ API\ changes\).\ Do\ NOT\ create\ any\ other\ files.
+BRANCH=agent/fix-deps-3
 ENGINE=codex
 MODEL=gpt-5.3-codex
 EVENT_LOG=/home/dotmac/projects/dotmac_starter/.seabone/logs/events.log
@@ -27,8 +27,13 @@ source "$SCRIPT_DIR/json-lock.sh"
 
 log_event() {
     local event="$1" status="$2" detail="$3"
-    local ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    printf '%s\n' "$(jq -n --arg ts "$ts" --arg project "$PROJECT_NAME" --arg task_id "$TASK_ID" --arg event "$event" --arg status "$status" --arg detail "$detail" '{ts:$ts,project:$project,task_id:$task_id,event:$event,status:$status,detail:$detail}')" >> "$EVENT_LOG"
+    local ts project_slug
+    ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    project_slug="${PROJECT_NAME:-}"
+    if [[ -z "$project_slug" || "$project_slug" == */* ]]; then
+        project_slug="$(basename "$PROJECT_DIR")"
+    fi
+    printf '%s\n' "$(jq -n --arg ts "$ts" --arg project "$project_slug" --arg task_id "$TASK_ID" --arg event "$event" --arg status "$status" --arg detail "$detail" '{ts:$ts,project:$project,task_id:$task_id,event:$event,status:$status,detail:$detail}')" >> "$EVENT_LOG"
 }
 
 set_status() {
@@ -242,29 +247,36 @@ ${PREV_LOG_CONTEXT:-No previous attempts — this is a first escalation.}
 elif [[ "$ENGINE" == "aider" ]]; then
     echo "[RUN] Aider + DeepSeek..."
 
-    export OPENAI_API_KEY="${DEEPSEEK_API_KEY}"
-    export OPENAI_API_BASE="https://api.deepseek.com"
+    if [[ -n "${DEEPSEEK_API_KEY:-}" ]]; then
+        export OPENAI_API_KEY="${OPENAI_API_KEY:-$DEEPSEEK_API_KEY}"
+        export OPENAI_API_BASE="${OPENAI_API_BASE:-https://api.deepseek.com}"
+    fi
 
     cp "$PROJECT_DIR/.aider.model.settings.yml" "$WORKTREE_DIR/" 2>/dev/null || true
     cp "$PROJECT_DIR/.aider.model.metadata.json" "$WORKTREE_DIR/" 2>/dev/null || true
     cp "$PROJECT_DIR/.aider.conf.yml" "$WORKTREE_DIR/" 2>/dev/null || true
     cp "$PROJECT_DIR/.aiderignore" "$WORKTREE_DIR/" 2>/dev/null || true
 
-    aider --model "openai/$MODEL" \
-        --no-auto-commits \
-        --yes-always \
-        --no-show-model-warnings \
-        --no-detect-urls \
-        --subtree-only \
-        --map-tokens 1024 \
-        --model-settings-file "$WORKTREE_DIR/.aider.model.settings.yml" \
-        --model-metadata-file "$WORKTREE_DIR/.aider.model.metadata.json" \
-        --message "$DESCRIPTION" \
-        2>&1 | tee -a "$LOG_FILE"
-    AGENT_EXIT=${PIPESTATUS[0]}
+    if [[ -z "${OPENAI_API_KEY:-}" ]]; then
+        echo "[ERROR] OPENAI_API_KEY is not set. Configure OPENAI_API_KEY or DEEPSEEK_API_KEY in .env.agent-swarm." | tee -a "$LOG_FILE"
+        AGENT_EXIT=2
+    else
+        aider --model "openai/$MODEL" \
+            --no-auto-commits \
+            --yes-always \
+            --no-show-model-warnings \
+            --no-detect-urls \
+            --subtree-only \
+            --map-tokens 1024 \
+            --model-settings-file "$WORKTREE_DIR/.aider.model.settings.yml" \
+            --model-metadata-file "$WORKTREE_DIR/.aider.model.metadata.json" \
+            --message "$DESCRIPTION" \
+            2>&1 | tee -a "$LOG_FILE"
+        AGENT_EXIT=${PIPESTATUS[0]}
+    fi
 
     # Self-review loop for aider only
-    if [[ $AGENT_EXIT -eq 0 ]]; then
+    if [[ $AGENT_EXIT -eq 0 && -n "${DEEPSEEK_API_KEY:-}" ]]; then
         cd "$WORKTREE_DIR"
         if ! git diff --quiet || ! git diff --cached --quiet; then
             for cycle in 1 2; do
