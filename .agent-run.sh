@@ -3,16 +3,16 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 
 # ---- Injected at spawn time ----
-WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-5
+WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-17
 PROJECT_DIR=/home/dotmac/projects/dotmac_starter
 SCRIPT_DIR=/home/dotmac/.seabone/scripts
 ACTIVE_FILE=/home/dotmac/projects/dotmac_starter/.seabone/active-tasks.json
-LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-5.log
-TASK_ID=fix-security-c1-5
-DESCRIPTION=Remove\ unnecessary\ \'\|\ safe\'\ from\ tojson\ expressions\ in\ two\ admin\ templates.\ The\ \'\|\ safe\'\ filter\ is\ redundant\ and\ harmful\ after\ tojson\ because\ tojson\ already\ HTML-encodes\ output\,\ and\ \'\|\ safe\'\ suppresses\ Jinja2\ auto-escaping.\ Fix\ both\ files:\ \(1\)\ templates/admin/audit/detail.html\ line\ ~59\ —\ change\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \}\}\'\;\ \(2\)\ templates/admin/billing/webhook_events/detail.html\ line\ ~60\ —\ change\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \}\}\'.\ This\ covers\ findings\ security-c1-5\ and\ security-c1-6.
-BRANCH=agent/fix-security-c1-5
-ENGINE=aider
-MODEL=deepseek-chat
+LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-17.log
+TASK_ID=fix-security-c1-17
+DESCRIPTION=Replace\ CORS\ wildcard\ methods\ and\ headers\ in\ app/main.py.\ Around\ line\ 91\,\ the\ CORSMiddleware\ is\ configured\ with\ allow_methods=\[\'\*\'\]\ and\ allow_headers=\[\'\*\'\]\ combined\ with\ allow_credentials=True\,\ which\ permits\ the\ TRACE\ method\ and\ arbitrary\ request\ headers\ from\ configured\ origins.\ Fix:\ Read\ app/main.py\ first\ to\ see\ the\ full\ CORSMiddleware\ config.\ Replace\ allow_methods=\[\'\*\'\]\ with\ an\ explicit\ list:\ \[\'GET\'\,\ \'POST\'\,\ \'PUT\'\,\ \'PATCH\'\,\ \'DELETE\'\,\ \'OPTIONS\'\].\ Replace\ allow_headers=\[\'\*\'\]\ with:\ \[\'Content-Type\'\,\ \'Authorization\'\,\ \'X-CSRF-Token\'\,\ \'X-Requested-With\'\].\ Modify\ ONLY\ app/main.py\,\ do\ NOT\ create\ any\ other\ files.\ Run\ make\ lint\ after\ changes.
+BRANCH=agent/fix-security-c1-17
+ENGINE=codex
+MODEL=gpt-5.3-codex
 EVENT_LOG=/home/dotmac/projects/dotmac_starter/.seabone/logs/events.log
 CONFIG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/config.json
 PROJECT_NAME=dotmac_starter
