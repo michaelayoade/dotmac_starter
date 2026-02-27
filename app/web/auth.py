@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["web-auth"])
 
 
+def _is_secure_request(request: Request) -> bool:
+    """Return True if request is over HTTPS."""
+    proto = request.headers.get("x-forwarded-proto", "")
+    return proto == "https" or request.url.scheme == "https"
+
+
 @router.get("/login", response_class=HTMLResponse)
 def login_page(
     request: Request,
@@ -79,11 +85,13 @@ async def login_submit(
     if not access_token:
         return _login_error(request, db, "Login failed", next_url)
 
+    is_secure = _is_secure_request(request)
     response = RedirectResponse(url=next_url, status_code=302)
     response.set_cookie(
         key="access_token",
         value=access_token,
         httponly=True,
+        secure=is_secure,
         samesite="lax",
         path="/",
         max_age=3600,
@@ -93,6 +101,7 @@ async def login_submit(
             key="refresh_token",
             value=refresh_token,
             httponly=True,
+            secure=is_secure,
             samesite="lax",
             path="/",
             max_age=30 * 24 * 3600,
