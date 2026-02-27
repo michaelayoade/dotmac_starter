@@ -3,16 +3,16 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 
 # ---- Injected at spawn time ----
-WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-5
+WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-20
 PROJECT_DIR=/home/dotmac/projects/dotmac_starter
 SCRIPT_DIR=/home/dotmac/.seabone/scripts
 ACTIVE_FILE=/home/dotmac/projects/dotmac_starter/.seabone/active-tasks.json
-LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-5.log
-TASK_ID=fix-security-c1-5
-DESCRIPTION=Remove\ unnecessary\ \'\|\ safe\'\ from\ tojson\ expressions\ in\ two\ admin\ templates.\ The\ \'\|\ safe\'\ filter\ is\ redundant\ and\ harmful\ after\ tojson\ because\ tojson\ already\ HTML-encodes\ output\,\ and\ \'\|\ safe\'\ suppresses\ Jinja2\ auto-escaping.\ Fix\ both\ files:\ \(1\)\ templates/admin/audit/detail.html\ line\ ~59\ —\ change\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \}\}\'\;\ \(2\)\ templates/admin/billing/webhook_events/detail.html\ line\ ~60\ —\ change\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \}\}\'.\ This\ covers\ findings\ security-c1-5\ and\ security-c1-6.
-BRANCH=agent/fix-security-c1-5
-ENGINE=aider
-MODEL=deepseek-chat
+LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-20.log
+TASK_ID=fix-security-c1-20
+DESCRIPTION=Fix\ rate\ limiting\ fail-open\ on\ Redis\ unavailability\ in\ app/middleware/rate_limit.py.\ Around\ line\ 76\,\ when\ Redis\ is\ unreachable\ or\ throws\ an\ error\,\ the\ middleware\ allows\ all\ requests\ through\ —\ authentication\ endpoints\ get\ zero\ brute-force\ protection\ during\ any\ Redis\ outage.\ Fix:\ \(1\)\ Read\ the\ full\ app/middleware/rate_limit.py\ to\ understand\ the\ dispatch\ and\ exception\ handling\ logic.\ \(2\)\ Define\ AUTH_PATHS\ =\ \{\'/auth/login\'\,\ \'/auth/mfa\'\,\ \'/auth/register\'\}\ or\ similar.\ \(3\)\ When\ a\ Redis\ error\ occurs\ AND\ the\ request\ path\ starts\ with\ or\ contains\ an\ auth\ endpoint\ path\,\ return\ a\ JSONResponse\ with\ status_code=503\ and\ body=\{\'detail\':\ \'Service\ temporarily\ unavailable\'\}\ —\ do\ NOT\ call\ call_next.\ \(4\)\ For\ all\ other\ \(non-auth\)\ paths\,\ maintain\ the\ existing\ fail-open\ behavior.\ Modify\ ONLY\ app/middleware/rate_limit.py\,\ do\ NOT\ create\ any\ other\ files.\ Run\ make\ lint\ and\ make\ type-check\ after\ changes.
+BRANCH=agent/fix-security-c1-20
+ENGINE=codex
+MODEL=gpt-5.3-codex
 EVENT_LOG=/home/dotmac/projects/dotmac_starter/.seabone/logs/events.log
 CONFIG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/config.json
 PROJECT_NAME=dotmac_starter

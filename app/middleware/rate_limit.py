@@ -21,6 +21,12 @@ _RATE_LIMIT_PATHS: dict[str, tuple[int, int]] = {
     "/auth/mfa/verify": (10, 60),      # 10 attempts per minute
     "/auth/register": (5, 300),        # 5 registrations per 5 minutes
 }
+AUTH_PATHS: set[str] = {
+    "/auth/login",
+    "/auth/mfa",
+    "/auth/register",
+    "/auth/password-reset",
+}
 
 
 def _get_client_ip(request: Request) -> str:
@@ -42,6 +48,10 @@ def _get_redis() -> object | None:
     except Exception:
         logger.debug("Rate limiter: Redis unavailable, skipping")
         return None
+
+
+def _is_auth_path(path: str) -> bool:
+    return any(path.startswith(auth_path) or auth_path in path for auth_path in AUTH_PATHS)
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -74,7 +84,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         max_requests, window_seconds = config
         r = self._ensure_redis()
         if r is None:
-            # If Redis is unavailable, allow the request (fail-open)
+            if _is_auth_path(clean_path):
+                logger.warning("Rate limiter: Redis unavailable on auth path %s", clean_path)
+                return JSONResponse(
+                    status_code=503,
+                    content={"detail": "Service temporarily unavailable"},
+                )
+            # If Redis is unavailable for non-auth routes, allow the request (fail-open)
             return await call_next(request)  # type: ignore[call-arg]
 
         client_ip = _get_client_ip(request)
@@ -94,6 +110,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             results = pipe.execute()
             current_count = results[1]
         except Exception:
+            if _is_auth_path(clean_path):
+                logger.warning("Rate limiter: Redis error on auth path %s", clean_path)
+                return JSONResponse(
+                    status_code=503,
+                    content={"detail": "Service temporarily unavailable"},
+                )
             logger.debug("Rate limiter: Redis error, allowing request")
             return await call_next(request)  # type: ignore[call-arg]
 
