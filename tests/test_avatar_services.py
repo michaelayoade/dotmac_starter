@@ -170,6 +170,22 @@ class TestAvatarFileCleanup:
                 # File should still exist since external URL was passed
                 assert test_file.exists()
 
+    def test_delete_avatar_blocks_path_traversal(self, tmp_path):
+        """Test traversal payload cannot delete files outside avatar directory."""
+        upload_dir = tmp_path / "avatars"
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        outside_file = tmp_path / "outside.txt"
+        outside_file.write_text("do not delete")
+
+        traversal_url = "/static/avatars/../outside.txt"
+        fake_settings = MagicMock()
+        fake_settings.avatar_url_prefix = "/static/avatars"
+        fake_settings.avatar_upload_dir = str(upload_dir)
+        with patch.object(avatar_service, "settings", fake_settings):
+            avatar_service.delete_avatar(traversal_url)
+
+        assert outside_file.exists()
+
 
 class TestAvatarExtensions:
     """Tests for file extension mapping."""

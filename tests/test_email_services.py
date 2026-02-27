@@ -1,6 +1,7 @@
 """Tests for email service - failure handling and configuration."""
 
 import smtplib
+from email import message_from_string
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -390,6 +391,42 @@ class TestSendPasswordResetEmail:
         assert captured_message is not None
         assert "my_reset_token" in captured_message
         assert "Reset" in captured_message or "reset" in captured_message
+
+    def test_send_password_reset_email_escapes_html_name(self, monkeypatch):
+        """Test user-supplied names are escaped in HTML body."""
+        monkeypatch.setenv("APP_URL", "https://app.example.com")
+        monkeypatch.setenv("SMTP_USE_SSL", "false")
+
+        mock_smtp = MagicMock()
+        captured_message = None
+
+        def capture_sendmail(from_email, to_email, message):
+            nonlocal captured_message
+            captured_message = message
+
+        mock_smtp.sendmail.side_effect = capture_sendmail
+
+        with patch("app.services.email.smtplib.SMTP", return_value=mock_smtp):
+            send_password_reset_email(
+                None,
+                "user@example.com",
+                "my_reset_token",
+                '<script>alert("xss")</script>',
+            )
+
+        assert captured_message is not None
+        mime_message = message_from_string(captured_message)
+        html_body = None
+        for part in mime_message.walk():
+            if part.get_content_type() == "text/html":
+                payload = part.get_payload(decode=True)
+                charset = part.get_content_charset() or "utf-8"
+                html_body = payload.decode(charset) if payload is not None else ""
+                break
+
+        assert html_body is not None
+        assert "<script>" not in html_body
+        assert "&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;" in html_body
 
 
 class TestEmailLogging:

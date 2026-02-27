@@ -3,37 +3,41 @@ from __future__ import annotations
 import hashlib
 import os
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 
 import pyotp
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import HTTPException, Request, Response, status
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from app.models.auth import (
     AuthProvider,
     MFAMethod,
     MFAMethodType,
-    Session as AuthSession,
     SessionStatus,
     UserCredential,
 )
-from app.services.common import coerce_uuid
-from app.services.response import ListResponseMixin
-from app.models.rbac import Permission, PersonRole, Role, RolePermission
+from app.models.auth import (
+    Session as AuthSession,
+)
 from app.models.domain_settings import DomainSetting, SettingDomain
 from app.models.person import Person
-from app.services.secrets import resolve_secret
+from app.models.rbac import Permission, PersonRole, Role, RolePermission
 from app.schemas.auth_flow import LoginResponse, LogoutResponse, TokenResponse
+from app.services.common import coerce_uuid
+from app.services.response import ListResponseMixin
+from app.services.secrets import resolve_secret
 
 PASSWORD_CONTEXT = CryptContext(
     schemes=["pbkdf2_sha256", "bcrypt"],
     default="pbkdf2_sha256",
     deprecated="auto",
 )
+_DUMMY_VERIFY_HASH = PASSWORD_CONTEXT.hash(secrets.token_urlsafe(32))
 
 
 def _env_value(name: str) -> str | None:
@@ -54,14 +58,14 @@ def _env_int(name: str) -> int | None:
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
     if value is None:
         return None
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
+        return value.replace(tzinfo=UTC)
     return value
 
 
@@ -71,6 +75,11 @@ def _truncate_user_agent(value: str | None, max_len: int = 512) -> str | None:
     if len(value) <= max_len:
         return value
     return value[:max_len]
+
+
+def _is_secure_request(request: Request) -> bool:
+    proto = request.headers.get("x-forwarded-proto", "")
+    return proto == "https" or request.url.scheme == "https"
 
 
 def _setting_value(db: Session | None, key: str) -> str | None:
@@ -142,14 +151,16 @@ def _refresh_cookie_name(db: Session | None) -> str:
     )
 
 
-def _refresh_cookie_secure(db: Session | None) -> bool:
+def _refresh_cookie_secure(db: Session | None, request: Request | None = None) -> bool:
     env_value = _env_value("REFRESH_COOKIE_SECURE")
     if env_value is not None:
         return env_value.lower() in {"1", "true", "yes", "on"}
     value = _setting_value(db, "refresh_cookie_secure")
     if value is not None:
         return str(value).lower() in {"1", "true", "yes", "on"}
-    return False
+    if request is not None:
+        return _is_secure_request(request)
+    return True
 
 
 def _refresh_cookie_samesite(db: Session | None) -> str:
@@ -216,7 +227,7 @@ def _issue_access_token(
         payload["roles"] = roles
     if permissions:
         payload["scopes"] = permissions
-    return jwt.encode(payload, _jwt_secret(db), algorithm=_jwt_algorithm(db))
+    return cast(str, jwt.encode(payload, _jwt_secret(db), algorithm=_jwt_algorithm(db)))
 
 
 def _issue_mfa_token(db: Session | None, person_id: str) -> str:
@@ -227,7 +238,7 @@ def _issue_mfa_token(db: Session | None, person_id: str) -> str:
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(minutes=5)).timestamp()),
     }
-    return jwt.encode(payload, _jwt_secret(db), algorithm=_jwt_algorithm(db))
+    return cast(str, jwt.encode(payload, _jwt_secret(db), algorithm=_jwt_algorithm(db)))
 
 
 def _password_reset_ttl_minutes(db: Session | None) -> int:
@@ -252,16 +263,19 @@ def _issue_password_reset_token(db: Session | None, person_id: str, email: str) 
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(minutes=_password_reset_ttl_minutes(db))).timestamp()),
     }
-    return jwt.encode(payload, _jwt_secret(db), algorithm=_jwt_algorithm(db))
+    return cast(str, jwt.encode(payload, _jwt_secret(db), algorithm=_jwt_algorithm(db)))
 
 
-def _decode_password_reset_token(db: Session | None, token: str) -> dict:
+def _decode_password_reset_token(db: Session | None, token: str) -> dict[str, Any]:
     return _decode_jwt(db, token, "password_reset")
 
 
-def _decode_jwt(db: Session | None, token: str, expected_type: str) -> dict:
+def _decode_jwt(db: Session | None, token: str, expected_type: str) -> dict[str, Any]:
     try:
-        payload = jwt.decode(token, _jwt_secret(db), algorithms=[_jwt_algorithm(db)])
+        payload = cast(
+            dict[str, Any],
+            jwt.decode(token, _jwt_secret(db), algorithms=[_jwt_algorithm(db)]),
+        )
     except JWTError as exc:
         raise HTTPException(status_code=401, detail="Invalid token") from exc
     if payload.get("typ") != expected_type:
@@ -269,7 +283,7 @@ def _decode_jwt(db: Session | None, token: str, expected_type: str) -> dict:
     return payload
 
 
-def decode_access_token(db: Session | None, token: str) -> dict:
+def decode_access_token(db: Session | None, token: str) -> dict[str, Any]:
     return _decode_jwt(db, token, "access")
 
 
@@ -330,13 +344,13 @@ def _decrypt_secret(db: Session | None, secret: str) -> str:
 
 
 def hash_password(password: str) -> str:
-    return PASSWORD_CONTEXT.hash(password)
+    return cast(str, PASSWORD_CONTEXT.hash(password))
 
 
 def verify_password(password: str, password_hash: str | None) -> bool:
     if not password_hash:
         return False
-    return PASSWORD_CONTEXT.verify(password, password_hash)
+    return cast(bool, PASSWORD_CONTEXT.verify(password, password_hash))
 
 
 def revoke_sessions_for_person(
@@ -369,11 +383,12 @@ class AuthFlow(ListResponseMixin):
     @staticmethod
     def _response_with_refresh_cookie(
         db: Session | None,
+        request: Request | None,
         payload: dict,
         model_cls,
         status_code: int = status.HTTP_200_OK,
     ) -> Response:
-        settings = AuthFlow.refresh_cookie_settings(db)
+        settings = AuthFlow.refresh_cookie_settings(db, request=request)
         response = Response(status_code=status_code)
         response.set_cookie(
             key=settings["key"],
@@ -415,7 +430,7 @@ class AuthFlow(ListResponseMixin):
         result = AuthFlow.login(db, username, password, request, provider)
         if result.get("refresh_token"):
             return AuthFlow._response_with_refresh_cookie(
-                db, result, LoginResponse, status.HTTP_200_OK
+                db, request, result, LoginResponse, status.HTTP_200_OK
             )
         return result
 
@@ -439,6 +454,7 @@ class AuthFlow(ListResponseMixin):
             .first()
         )
         if not credential:
+            verify_password(password, _DUMMY_VERIFY_HASH)
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
         now = _now()
@@ -472,7 +488,7 @@ class AuthFlow(ListResponseMixin):
                 "mfa_token": _issue_mfa_token(db, str(credential.person_id)),
             }
 
-        return AuthFlow._issue_tokens(db, credential.person_id, request)
+        return AuthFlow._issue_tokens(db, str(credential.person_id), request)
 
     @staticmethod
     def mfa_setup(db: Session, person_id: str, label: str | None):
@@ -574,7 +590,7 @@ class AuthFlow(ListResponseMixin):
     def mfa_verify_response(db: Session, mfa_token: str, code: str, request: Request):
         result = AuthFlow.mfa_verify(db, mfa_token, code, request)
         return AuthFlow._response_with_refresh_cookie(
-            db, result, TokenResponse, status.HTTP_200_OK
+            db, request, result, TokenResponse, status.HTTP_200_OK
         )
 
     @staticmethod
@@ -633,7 +649,7 @@ class AuthFlow(ListResponseMixin):
             raise HTTPException(status_code=401, detail="Missing refresh token")
         result = AuthFlow.refresh(db, resolved, request)
         return AuthFlow._response_with_refresh_cookie(
-            db, result, TokenResponse, status.HTTP_200_OK
+            db, request, result, TokenResponse, status.HTTP_200_OK
         )
 
     @staticmethod
@@ -668,11 +684,11 @@ class AuthFlow(ListResponseMixin):
         return refresh_token or request.cookies.get(settings["key"])
 
     @staticmethod
-    def refresh_cookie_settings(db: Session | None = None):
+    def refresh_cookie_settings(db: Session | None = None, request: Request | None = None):
         return {
             "key": _refresh_cookie_name(db),
             "httponly": True,
-            "secure": _refresh_cookie_secure(db),
+            "secure": _refresh_cookie_secure(db, request=request),
             "samesite": _refresh_cookie_samesite(db),
             "domain": _refresh_cookie_domain(db),
             "path": _refresh_cookie_path(db),

@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from jose import jwt
 from starlette.requests import Request
 
+from app.services import auth_flow as auth_flow_service
 from app.models.auth import Session as AuthSession, SessionStatus, UserCredential
 from app.models.auth import AuthProvider
 from app.services.auth_flow import AuthFlow, decode_access_token, hash_password
@@ -57,6 +58,31 @@ def test_login_and_refresh_reuse_detection(db_session, person, monkeypatch):
     session = db_session.query(AuthSession).filter(AuthSession.person_id == person.id).first()
     assert session.status == SessionStatus.revoked
     assert session.revoked_at is not None
+
+
+def test_login_missing_user_runs_dummy_verify(db_session, monkeypatch):
+    request = _make_request()
+    captured = {"calls": 0, "password_hash": None}
+
+    def _verify_spy(password: str, password_hash: str | None) -> bool:
+        captured["calls"] += 1
+        captured["password_hash"] = password_hash
+        return False
+
+    monkeypatch.setattr(auth_flow_service, "verify_password", _verify_spy)
+
+    with pytest.raises(HTTPException) as exc:
+        AuthFlow.login(
+            db_session,
+            username=f"missing-{uuid.uuid4().hex[:8]}",
+            password="invalid-password",
+            request=request,
+            provider=None,
+        )
+
+    assert exc.value.status_code == 401
+    assert captured["calls"] == 1
+    assert captured["password_hash"] == auth_flow_service._DUMMY_VERIFY_HASH
 
 
 def test_mfa_setup_confirm(db_session, person, monkeypatch):

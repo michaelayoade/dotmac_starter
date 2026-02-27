@@ -1,6 +1,4 @@
 """Tests for auth_flow cookie settings - domain/samesite/secure and concurrent refresh."""
-
-import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
@@ -75,9 +73,39 @@ class TestRefreshCookieSettings:
             assert _refresh_cookie_secure(None) is False
 
     def test_cookie_secure_default(self, monkeypatch):
-        """Test default secure=false."""
+        """Test default secure=true without request context."""
         monkeypatch.delenv("REFRESH_COOKIE_SECURE", raising=False)
-        assert _refresh_cookie_secure(None) is False
+        assert _refresh_cookie_secure(None) is True
+
+    def test_cookie_secure_default_http_request(self, monkeypatch):
+        """Test default secure falls back to request scheme for HTTP."""
+        monkeypatch.delenv("REFRESH_COOKIE_SECURE", raising=False)
+        request = Request(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/auth/login",
+                "headers": [],
+                "client": ("127.0.0.1", 12345),
+                "scheme": "http",
+            }
+        )
+        assert _refresh_cookie_secure(None, request=request) is False
+
+    def test_cookie_secure_default_forwarded_https(self, monkeypatch):
+        """Test default secure uses x-forwarded-proto=https."""
+        monkeypatch.delenv("REFRESH_COOKIE_SECURE", raising=False)
+        request = Request(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/auth/login",
+                "headers": [(b"x-forwarded-proto", b"https")],
+                "client": ("127.0.0.1", 12345),
+                "scheme": "http",
+            }
+        )
+        assert _refresh_cookie_secure(None, request=request) is True
 
     def test_cookie_secure_from_db(self, db_session, monkeypatch):
         """Test secure setting from database."""
@@ -160,7 +188,7 @@ class TestRefreshCookieSettingsDict:
 
         assert settings["key"] == "refresh_token"
         assert settings["httponly"] is True
-        assert settings["secure"] is False
+        assert settings["secure"] is True
         assert settings["samesite"] == "lax"
         assert settings["domain"] is None
         assert settings["path"] == "/"

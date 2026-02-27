@@ -88,11 +88,24 @@ def delete_avatar(avatar_url: str | None) -> None:
     if not avatar_url:
         return
 
-    if avatar_url.startswith(settings.avatar_url_prefix):
-        filename = avatar_url.replace(settings.avatar_url_prefix + "/", "")
-        file_path = Path(settings.avatar_upload_dir) / filename
-        if file_path.exists():
-            os.remove(file_path)
+    url_prefix = settings.avatar_url_prefix.rstrip("/")
+    normalized_url = avatar_url.split("?", 1)[0].split("#", 1)[0]
+    if not normalized_url.startswith(f"{url_prefix}/"):
+        return
+
+    filename = normalized_url[len(url_prefix) + 1 :]
+    if not filename:
+        return
+
+    upload_dir = Path(settings.avatar_upload_dir).resolve()
+    file_path = (upload_dir / filename).resolve(strict=False)
+    try:
+        file_path.relative_to(upload_dir)
+    except ValueError:
+        return
+
+    if file_path.is_file():
+        os.remove(file_path)
 
 
 def _get_extension(content_type: str) -> str:

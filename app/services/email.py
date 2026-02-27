@@ -3,6 +3,7 @@ import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from html import escape
 
 from sqlalchemy.orm import Session
 
@@ -64,6 +65,7 @@ def send_email(
     msg.attach(MIMEText(body_html, "html"))
 
     try:
+        server: smtplib.SMTP | smtplib.SMTP_SSL
         if config["use_ssl"]:
             server = smtplib.SMTP_SSL(config["host"], config["port"])
         else:
@@ -92,11 +94,12 @@ def send_password_reset_email(
     person_name: str | None = None,
 ) -> bool:
     name = person_name or "there"
+    name_html = escape(name, quote=True)
     app_url = _env_value("APP_URL") or "http://localhost:8000"
     reset_link = f"{app_url.rstrip('/')}/auth/reset-password?token={reset_token}"
     subject = "Reset your password"
     body_html = (
-        f"<p>Hi {name},</p>"
+        f"<p>Hi {name_html},</p>"
         "<p>Use the link below to reset your password:</p>"
         f'<p><a href="{reset_link}">Reset password</a></p>'
     )
