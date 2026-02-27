@@ -10,7 +10,7 @@
         {% include "admin/components/topbar.html" %}
 
         <!-- Page content -->
-        <main class="flex-1 p-6">
+        <main id="main-content" class="flex-1 p-6">
             {% if success_message %}
             <div class="mb-4 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-sm">
                 {{ success_message }}
@@ -26,15 +26,33 @@
     </div>
 </div>
 
-<!-- Mobile sidebar overlay -->
+<!-- Mobile sidebar overlay: renders a slide-over panel on screens smaller than lg.
+     The backdrop (black/50) closes the panel on click.
+     `mobile_sidebar=true` tells sidebar.html to drop its `hidden lg:block fixed` classes
+     so the aside is visible and positioned relative to the flex container here. -->
 <div x-data="{ sidebarOpen: false }"
      x-on:toggle-sidebar.window="sidebarOpen = !sidebarOpen"
      x-show="sidebarOpen"
      x-cloak
-     class="lg:hidden fixed inset-0 z-50">
+     class="lg:hidden fixed inset-0 z-50 flex"
+     role="dialog"
+     aria-modal="true"
+     aria-label="Navigation menu">
     <div x-on:click="sidebarOpen = false" class="absolute inset-0 bg-black/50"></div>
-    <div class="relative w-64 h-full">
+    <div class="relative flex w-64 flex-col shadow-xl">
+        {% with mobile_sidebar=true %}
         {% include "admin/components/sidebar.html" %}
+        {% endwith %}
+    </div>
+    <!-- Close button for keyboard/touch users -->
+    <div class="flex-1 flex items-start pt-4 pl-4">
+        <button x-on:click="sidebarOpen = false"
+                class="rounded-full bg-white/10 p-2 text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white"
+                aria-label="Close navigation menu">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
     </div>
 </div>
 {% endblock %}
@@ -160,5 +178,34 @@ function notificationBell() {
         }
     };
 }
+</script>
+<script>
+// ═══════════════════════════════════════════════════════════════
+// Responsive Table Enhancement
+// Wraps all admin data tables in overflow-x-auto containers so
+// wide tables scroll horizontally on small screens instead of
+// being cut off by the parent's overflow:hidden clip.
+// ═══════════════════════════════════════════════════════════════
+(function makeTablesResponsive() {
+    function wrapTables(root) {
+        (root || document).querySelectorAll('#main-content table.w-full').forEach(function(table) {
+            if (table.parentElement && table.parentElement.classList.contains('overflow-x-auto')) {
+                return; // already wrapped
+            }
+            var wrapper = document.createElement('div');
+            wrapper.className = 'overflow-x-auto';
+            table.parentNode.insertBefore(wrapper, table);
+            wrapper.appendChild(table);
+        });
+    }
+
+    // Run on initial page load
+    document.addEventListener('DOMContentLoaded', wrapTables);
+
+    // Re-run after HTMX content swaps (e.g. paginated table reloads)
+    document.addEventListener('htmx:afterSwap', function(e) {
+        wrapTables(e.target);
+    });
+}());
 </script>
 {% endblock %}
