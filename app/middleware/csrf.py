@@ -6,6 +6,7 @@ Implements a double-submit cookie check:
 """
 from __future__ import annotations
 
+import re
 import secrets
 from hmac import compare_digest
 
@@ -19,11 +20,17 @@ _FORM_CONTENT_TYPES = {
     "multipart/form-data",
     "text/plain",
 }
+_TOKEN_PATTERN = re.compile(r'^[A-Za-z0-9_-]{32,}$')
 
 
 def _is_secure_request(request: Request) -> bool:
     proto = request.headers.get("x-forwarded-proto", "")
     return proto == "https" or request.url.scheme == "https"
+
+
+def _is_valid_token(token: str) -> bool:
+    """Check if token matches the expected format."""
+    return bool(_TOKEN_PATTERN.fullmatch(token))
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
@@ -37,7 +44,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
 
     def _ensure_token(self, request: Request) -> tuple[str, bool]:
         token = request.cookies.get(self.cookie_name, "")
-        if token and len(token) >= 24:
+        if token and _is_valid_token(token):
             return token, False
         return secrets.token_urlsafe(32), True
 
@@ -66,7 +73,21 @@ class CSRFMiddleware(BaseHTTPMiddleware):
 
         if self._requires_csrf(request):
             submitted_token = await self._submitted_token(request)
-            if not submitted_token or not compare_digest(submitted_token, csrf_token):
+            
+            # Validate submitted token exists and has correct format
+            if not submitted_token or not _is_valid_token(submitted_token):
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "code": "csrf_invalid",
+                        "message": "CSRF token missing or invalid",
+                        "details": None,
+                    },
+                )
+            
+            # csrf_token is already validated in _ensure_token()
+            # Use constant-time comparison for the actual token match
+            if not compare_digest(submitted_token, csrf_token):
                 return JSONResponse(
                     status_code=403,
                     content={

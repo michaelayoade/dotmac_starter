@@ -3,14 +3,14 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 
 # ---- Injected at spawn time ----
-WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-5
+WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-9
 PROJECT_DIR=/home/dotmac/projects/dotmac_starter
 SCRIPT_DIR=/home/dotmac/.seabone/scripts
 ACTIVE_FILE=/home/dotmac/projects/dotmac_starter/.seabone/active-tasks.json
-LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-5.log
-TASK_ID=fix-security-c1-5
-DESCRIPTION=Remove\ unnecessary\ \'\|\ safe\'\ from\ tojson\ expressions\ in\ two\ admin\ templates.\ The\ \'\|\ safe\'\ filter\ is\ redundant\ and\ harmful\ after\ tojson\ because\ tojson\ already\ HTML-encodes\ output\,\ and\ \'\|\ safe\'\ suppresses\ Jinja2\ auto-escaping.\ Fix\ both\ files:\ \(1\)\ templates/admin/audit/detail.html\ line\ ~59\ —\ change\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \}\}\'\;\ \(2\)\ templates/admin/billing/webhook_events/detail.html\ line\ ~60\ —\ change\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \}\}\'.\ This\ covers\ findings\ security-c1-5\ and\ security-c1-6.
-BRANCH=agent/fix-security-c1-5
+LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-9.log
+TASK_ID=fix-security-c1-9
+DESCRIPTION=Add\ format\ validation\ to\ CSRF\ token\ check.\ In\ app/middleware/csrf.py\ around\ line\ 40\,\ CSRF\ token\ validity\ is\ checked\ only\ by\ length\ \(\>=\ 24\)\,\ meaning\ any\ 24-char\ string\ passes.\ Fix:\ Add\ a\ regex\ format\ check\ using\ re.fullmatch\(r\'\[A-Za-z0-9_-\]\{32\,\}\'\,\ token\)\ before\ accepting\ the\ token\ as\ valid.\ Import\ re\ at\ the\ top\ of\ the\ file.\ The\ check\ should\ apply\ to\ both\ the\ cookie\ token\ and\ the\ submitted\ form\ token.\ Run\ make\ lint\ and\ make\ type-check\ after\ changes.
+BRANCH=agent/fix-security-c1-9
 ENGINE=aider
 MODEL=deepseek-chat
 EVENT_LOG=/home/dotmac/projects/dotmac_starter/.seabone/logs/events.log
