@@ -325,7 +325,8 @@ def readiness_check() -> JSONResponse:
         finally:
             db.close()
     except Exception as e:
-        checks["database"] = f"error: {e}"
+        logger.exception("Database health check failed")
+        checks["database"] = "unavailable"
 
     # Check Redis
     try:
@@ -337,7 +338,8 @@ def readiness_check() -> JSONResponse:
         r.ping()
         checks["redis"] = "ok"
     except Exception as e:
-        checks["redis"] = f"error: {e}"
+        logger.exception("Redis health check failed")
+        checks["redis"] = "unavailable"
 
     all_ok = all(v == "ok" for v in checks.values())
     return JSONResponse(

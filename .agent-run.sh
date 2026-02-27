@@ -3,14 +3,14 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 
 # ---- Injected at spawn time ----
-WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-5
+WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-11
 PROJECT_DIR=/home/dotmac/projects/dotmac_starter
 SCRIPT_DIR=/home/dotmac/.seabone/scripts
 ACTIVE_FILE=/home/dotmac/projects/dotmac_starter/.seabone/active-tasks.json
-LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-5.log
-TASK_ID=fix-security-c1-5
-DESCRIPTION=Remove\ unnecessary\ \'\|\ safe\'\ from\ tojson\ expressions\ in\ two\ admin\ templates.\ The\ \'\|\ safe\'\ filter\ is\ redundant\ and\ harmful\ after\ tojson\ because\ tojson\ already\ HTML-encodes\ output\,\ and\ \'\|\ safe\'\ suppresses\ Jinja2\ auto-escaping.\ Fix\ both\ files:\ \(1\)\ templates/admin/audit/detail.html\ line\ ~59\ —\ change\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \}\}\'\;\ \(2\)\ templates/admin/billing/webhook_events/detail.html\ line\ ~60\ —\ change\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \}\}\'.\ This\ covers\ findings\ security-c1-5\ and\ security-c1-6.
-BRANCH=agent/fix-security-c1-5
+LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-11.log
+TASK_ID=fix-security-c1-11
+DESCRIPTION=Fix\ /health/ready\ endpoint\ leaking\ raw\ exception\ messages.\ In\ app/main.py\ around\ lines\ 327\ and\ 339\,\ the\ health\ check\ catches\ exceptions\ and\ returns\ str\(e\)\ in\ the\ JSON\ response\ body\,\ leaking\ internal\ infrastructure\ details\ \(e.g.\ connection\ strings\,\ IP\ addresses\).\ Fix:\ \(1\)\ In\ each\ except\ block\,\ call\ logger.exception\(\)\ or\ logger.error\(\)\ to\ log\ the\ full\ error\ internally.\ \(2\)\ Return\ a\ generic\ string\ like\ \'unavailable\'\ instead\ of\ str\(e\)\ in\ the\ checks\ dict.\ The\ response\ JSON\ should\ be\ safe\ to\ expose\ publicly.\ Run\ make\ lint\ and\ make\ type-check\ after\ changes.
+BRANCH=agent/fix-security-c1-11
 ENGINE=aider
 MODEL=deepseek-chat
 EVENT_LOG=/home/dotmac/projects/dotmac_starter/.seabone/logs/events.log
