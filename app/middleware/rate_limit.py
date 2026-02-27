@@ -7,6 +7,14 @@ from __future__ import annotations
 import logging
 import os
 import time
+from ipaddress import (
+    IPv4Address,
+    IPv4Network,
+    IPv6Address,
+    IPv6Network,
+    ip_address,
+    ip_network,
+)
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -22,14 +30,61 @@ _RATE_LIMIT_PATHS: dict[str, tuple[int, int]] = {
     "/auth/register": (5, 300),        # 5 registrations per 5 minutes
 }
 
+_TRUSTED_PROXY_CIDRS = os.getenv("TRUSTED_PROXY_CIDRS", "")
+
+
+def _load_trusted_proxy_networks() -> list[IPv4Network | IPv6Network]:
+    """Parse trusted proxy CIDRs from env, ignoring invalid entries."""
+    networks: list[IPv4Network | IPv6Network] = []
+    for raw_cidr in _TRUSTED_PROXY_CIDRS.split(","):
+        cidr = raw_cidr.strip()
+        if not cidr:
+            continue
+        try:
+            networks.append(ip_network(cidr, strict=False))
+        except ValueError:
+            logger.warning("Ignoring invalid TRUSTED_PROXY_CIDRS entry: %s", cidr)
+    return networks
+
+
+_TRUSTED_PROXY_NETWORKS = _load_trusted_proxy_networks()
+
+
+def _parse_ip(value: str) -> IPv4Address | IPv6Address | None:
+    """Best-effort parse of an IP address string."""
+    try:
+        return ip_address(value)
+    except ValueError:
+        return None
+
 
 def _get_client_ip(request: Request) -> str:
-    """Extract client IP, respecting X-Forwarded-For behind a proxy."""
+    """Extract client IP, trusting proxy headers only from trusted proxies."""
+    client = request.client
+    if not client:
+        return "unknown"
+
+    direct_ip = client.host
+    client_ip = _parse_ip(direct_ip)
+    is_trusted_proxy = bool(
+        client_ip and any(client_ip in network for network in _TRUSTED_PROXY_NETWORKS)
+    )
+    if not is_trusted_proxy:
+        return direct_ip
+
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
-        return forwarded.split(",")[0].strip()
-    client = request.client
-    return client.host if client else "unknown"
+        forwarded_ip = forwarded.split(",", 1)[0].strip()
+        if _parse_ip(forwarded_ip):
+            return forwarded_ip
+
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip:
+        real_ip = real_ip.strip()
+        if _parse_ip(real_ip):
+            return real_ip
+
+    return direct_ip
 
 
 def _get_redis() -> object | None:

@@ -3,16 +3,16 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 
 # ---- Injected at spawn time ----
-WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-5
+WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-18
 PROJECT_DIR=/home/dotmac/projects/dotmac_starter
 SCRIPT_DIR=/home/dotmac/.seabone/scripts
 ACTIVE_FILE=/home/dotmac/projects/dotmac_starter/.seabone/active-tasks.json
-LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-5.log
-TASK_ID=fix-security-c1-5
-DESCRIPTION=Remove\ unnecessary\ \'\|\ safe\'\ from\ tojson\ expressions\ in\ two\ admin\ templates.\ The\ \'\|\ safe\'\ filter\ is\ redundant\ and\ harmful\ after\ tojson\ because\ tojson\ already\ HTML-encodes\ output\,\ and\ \'\|\ safe\'\ suppresses\ Jinja2\ auto-escaping.\ Fix\ both\ files:\ \(1\)\ templates/admin/audit/detail.html\ line\ ~59\ —\ change\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \}\}\'\;\ \(2\)\ templates/admin/billing/webhook_events/detail.html\ line\ ~60\ —\ change\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \}\}\'.\ This\ covers\ findings\ security-c1-5\ and\ security-c1-6.
-BRANCH=agent/fix-security-c1-5
-ENGINE=aider
-MODEL=deepseek-chat
+LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-18.log
+TASK_ID=fix-security-c1-18
+DESCRIPTION=Fix\ X-Forwarded-For\ spoofing\ bypass\ in\ rate\ limiter.\ In\ app/middleware/rate_limit.py\ around\ line\ 28\,\ the\ _get_client_ip\ function\ blindly\ trusts\ the\ X-Forwarded-For\ header\ —\ an\ attacker\ can\ set\ a\ different\ spoofed\ IP\ on\ every\ login\ attempt\ to\ completely\ bypass\ brute-force\ rate\ limits.\ Fix:\ \(1\)\ Read\ app/middleware/rate_limit.py\ fully\ first.\ \(2\)\ Add\ support\ for\ a\ TRUSTED_PROXY_CIDRS\ config\ \(read\ from\ env\ var\ TRUSTED_PROXY_CIDRS\,\ comma-separated\ CIDRs\,\ default\ empty\ string\).\ \(3\)\ In\ _get_client_ip:\ only\ trust\ X-Forwarded-For\ /\ X-Real-IP\ headers\ when\ request.client.host\ is\ an\ address\ within\ one\ of\ the\ configured\ trusted\ proxy\ CIDRs.\ \(4\)\ Otherwise\ fall\ back\ to\ request.client.host\ directly\,\ ignoring\ spoofable\ headers.\ \(5\)\ Use\ Python\'s\ ipaddress\ module\ for\ CIDR\ matching.\ Modify\ ONLY\ app/middleware/rate_limit.py\,\ do\ NOT\ create\ any\ other\ files.\ Run\ make\ lint\ and\ make\ type-check\ after\ changes.
+BRANCH=agent/fix-security-c1-18
+ENGINE=codex
+MODEL=gpt-5.3-codex
 EVENT_LOG=/home/dotmac/projects/dotmac_starter/.seabone/logs/events.log
 CONFIG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/config.json
 PROJECT_NAME=dotmac_starter
