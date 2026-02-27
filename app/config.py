@@ -62,6 +62,9 @@ class Settings:
     # CORS
     cors_origins: str = os.getenv("CORS_ORIGINS", "")  # Comma-separated origins
 
+    # Metrics
+    metrics_token: str | None = os.getenv("METRICS_TOKEN") or None
+
 
 def validate_settings(s: Settings) -> list[str]:
     """Validate required settings at startup. Returns list of warnings."""

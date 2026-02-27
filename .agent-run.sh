@@ -3,16 +3,16 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 
 # ---- Injected at spawn time ----
-WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-5
+WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-10
 PROJECT_DIR=/home/dotmac/projects/dotmac_starter
 SCRIPT_DIR=/home/dotmac/.seabone/scripts
 ACTIVE_FILE=/home/dotmac/projects/dotmac_starter/.seabone/active-tasks.json
-LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-5.log
-TASK_ID=fix-security-c1-5
-DESCRIPTION=Remove\ unnecessary\ \'\|\ safe\'\ from\ tojson\ expressions\ in\ two\ admin\ templates.\ The\ \'\|\ safe\'\ filter\ is\ redundant\ and\ harmful\ after\ tojson\ because\ tojson\ already\ HTML-encodes\ output\,\ and\ \'\|\ safe\'\ suppresses\ Jinja2\ auto-escaping.\ Fix\ both\ files:\ \(1\)\ templates/admin/audit/detail.html\ line\ ~59\ —\ change\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \}\}\'\;\ \(2\)\ templates/admin/billing/webhook_events/detail.html\ line\ ~60\ —\ change\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \}\}\'.\ This\ covers\ findings\ security-c1-5\ and\ security-c1-6.
-BRANCH=agent/fix-security-c1-5
-ENGINE=aider
-MODEL=deepseek-chat
+LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-10.log
+TASK_ID=fix-security-c1-10
+DESCRIPTION=Add\ authentication\ to\ the\ /metrics\ Prometheus\ endpoint.\ In\ app/main.py\ around\ line\ 349\,\ the\ /metrics\ endpoint\ is\ publicly\ accessible\,\ leaking\ internal\ performance\ and\ infrastructure\ data.\ Fix:\ Add\ an\ IP\ allowlist\ check\ or\ a\ bearer\ token\ requirement.\ Preferred\ approach:\ \(1\)\ Read\ an\ optional\ METRICS_TOKEN\ env\ var\ from\ settings.\ \(2\)\ If\ set\,\ require\ \'Authorization:\ Bearer\ \<token\>\'\ header\ on\ requests\ to\ /metrics\,\ returning\ 401\ if\ missing/invalid.\ \(3\)\ If\ METRICS_TOKEN\ is\ not\ set\,\ restrict\ to\ loopback\ \(127.0.0.1\)\ only.\ Log\ unauthorized\ access\ attempts\ at\ warning\ level.\ Run\ make\ lint\ and\ make\ type-check\ after\ changes.
+BRANCH=agent/fix-security-c1-10
+ENGINE=codex
+MODEL=gpt-5.3-codex
 EVENT_LOG=/home/dotmac/projects/dotmac_starter/.seabone/logs/events.log
 CONFIG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/config.json
 PROJECT_NAME=dotmac_starter
