@@ -20,7 +20,9 @@ logger = logging.getLogger(__name__)
 class WebAuthRedirect(HTTPException):
     """Raised when web auth fails — triggers redirect to login page."""
 
-    def __init__(self, next_url: str = "/admin") -> None:
+    def __init__(self, next_url: str | None = None) -> None:
+        # If no next_url is provided, we'll use a default
+        # The actual redirect URL will be determined by the exception handler
         self.next_url = next_url
         super().__init__(status_code=302, detail="Not authenticated")
 
@@ -44,6 +46,7 @@ def require_web_auth(
     """
     token = request.cookies.get("access_token", "")
     if not token:
+        # Pass the current path as next_url so user returns here after login
         raise WebAuthRedirect(next_url=request.url.path)
 
     try:

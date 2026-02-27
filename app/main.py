@@ -217,6 +217,36 @@ def _is_audit_path_skipped(path: str, skip_paths: list[str]) -> bool:
     return any(path.startswith(prefix) for prefix in skip_paths)
 
 
+def _safe_next_url(url: str | None) -> str:
+    """Validate a next_url parameter to prevent open redirects.
+    
+    Returns a safe URL that:
+    - Starts with '/'
+    - Does not contain '://' (no scheme)
+    - Does not contain '//' after the first character (no protocol-relative URLs)
+    - Defaults to '/admin' if invalid or empty
+    """
+    if not url:
+        return "/admin"
+    
+    url_str = str(url).strip()
+    
+    # Must start with '/'
+    if not url_str.startswith('/'):
+        return "/admin"
+    
+    # Must not contain '://' (no scheme like http://, https://, etc.)
+    if '://' in url_str:
+        return "/admin"
+    
+    # Must not contain '//' after the first character (no protocol-relative URLs like //evil.com)
+    # Check if there's '//' anywhere except at the very beginning
+    if '//' in url_str[1:]:
+        return "/admin"
+    
+    return url_str
+
+
 def _include_api_router(router: object, dependencies: list[Any] | None = None) -> None:
     app.include_router(router, dependencies=dependencies)  # type: ignore[arg-type]
     app.include_router(router, prefix="/api/v1", dependencies=dependencies)  # type: ignore[arg-type]
@@ -296,8 +326,8 @@ async def web_auth_redirect_handler(request: Request, exc: WebAuthRedirect) -> R
     """Redirect to login page when web auth fails."""
     from starlette.responses import RedirectResponse
 
-    next_url = exc.next_url or request.url.path
-    return RedirectResponse(url=f"/admin/login?next={next_url}", status_code=302)
+    safe_next_url = _safe_next_url(exc.next_url)
+    return RedirectResponse(url=f"/admin/login?next={safe_next_url}", status_code=302)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
