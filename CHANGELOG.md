@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Security
+- Bump Jinja2 from 3.1.4 to >=3.1.6 to address CVE-2024-56201 and CVE-2024-56326 (sandbox bypass and code execution vulnerabilities) (PR #21)
+- Bump cryptography from 42.0.8 to >=43.0.0 to incorporate security patches for RSA/EC operations and memory safety fixes in OpenSSL bindings (PR #20)
 - Remove redundant `| safe` filter from `tojson` expressions in audit and billing admin templates — `tojson` is already HTML-safe and `| safe` suppressed Jinja2 auto-escaping (PR #2)
 - Validate login `next` redirect parameter against a safe-URL allowlist to prevent open redirect attacks (PR #3)
 - Sanitize user-controlled branding CSS before persistence, stripping `javascript:`, `expression()`, `@import`, and non-http `url()` schemes to prevent stored XSS (PR #4)
@@ -52,6 +54,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.dockerignore` for optimized Docker builds
 
 ### Changed
+- Bump FastAPI from 0.111.0 to >=0.115.0 (validation bypass fixes, dependency injection improvements) (PR #22)
+- Bump OpenTelemetry packages from 0.47b0/1.26.0 to >=0.50b0/>=1.29.0 stable beta with matching instrumentation packages (PR #24)
+- Bump uvicorn (>=0.34.0), httpx (>=0.28.0), pydantic (>=2.11.0), python-dotenv (>=1.2.1), and celery (>=5.5.0) to latest patched versions (PR #23)
+- Frontend accessibility improvements: responsive tables with horizontal scroll, mobile sidebar fixes, and ARIA enhancements across admin templates (PR #25)
 - SQLAlchemy 2.0 pattern in `main.py`: `db.query()` → `select()` + `db.scalars()`
 - Error responses now include `request_id` field for debugging
 
