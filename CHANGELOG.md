@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Remove redundant `| safe` filter from `tojson` expressions in audit and billing admin templates — `tojson` is already HTML-safe and `| safe` suppressed Jinja2 auto-escaping (PR #2)
+- Validate login `next` redirect parameter against a safe-URL allowlist to prevent open redirect attacks (PR #3)
+- Sanitize user-controlled branding CSS before persistence, stripping `javascript:`, `expression()`, `@import`, and non-http `url()` schemes to prevent stored XSS (PR #4)
+- Replace `{{ btn.icon | safe }}` with a CSS class-based icon lookup in table macros, eliminating a stored XSS vector in admin table action buttons (PR #5)
+- Replace string-prefix path traversal guard with `Path.is_relative_to()` in storage service for more robust protection against symlink and relative-path bypasses (PR #6)
+
 ### Added
 - Security headers middleware (CSP, X-Frame-Options, HSTS, Referrer-Policy, Permissions-Policy)
 - CORS middleware with configurable origins via `CORS_ORIGINS` env var
