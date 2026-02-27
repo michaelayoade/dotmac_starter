@@ -3,16 +3,16 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 
 # ---- Injected at spawn time ----
-WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-5
+WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-19
 PROJECT_DIR=/home/dotmac/projects/dotmac_starter
 SCRIPT_DIR=/home/dotmac/.seabone/scripts
 ACTIVE_FILE=/home/dotmac/projects/dotmac_starter/.seabone/active-tasks.json
-LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-5.log
-TASK_ID=fix-security-c1-5
-DESCRIPTION=Remove\ unnecessary\ \'\|\ safe\'\ from\ tojson\ expressions\ in\ two\ admin\ templates.\ The\ \'\|\ safe\'\ filter\ is\ redundant\ and\ harmful\ after\ tojson\ because\ tojson\ already\ HTML-encodes\ output\,\ and\ \'\|\ safe\'\ suppresses\ Jinja2\ auto-escaping.\ Fix\ both\ files:\ \(1\)\ templates/admin/audit/detail.html\ line\ ~59\ —\ change\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \}\}\'\;\ \(2\)\ templates/admin/billing/webhook_events/detail.html\ line\ ~60\ —\ change\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \}\}\'.\ This\ covers\ findings\ security-c1-5\ and\ security-c1-6.
-BRANCH=agent/fix-security-c1-5
-ENGINE=aider
-MODEL=deepseek-chat
+LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-19.log
+TASK_ID=fix-security-c1-19
+DESCRIPTION=Strengthen\ API\ key\ hashing\ from\ bare\ SHA-256\ to\ PBKDF2\ in\ app/services/auth.py.\ Around\ line\ 42\,\ API\ keys\ are\ hashed\ with\ hashlib.sha256\(value.encode\(\)\).hexdigest\(\)\,\ which\ is\ computationally\ cheap\ and\ susceptible\ to\ GPU\ brute-force\ or\ rainbow\ table\ attacks\ against\ a\ leaked\ api_keys\ table.\ Fix:\ \(1\)\ Read\ app/services/auth.py\ completely\ to\ understand\ how\ keys\ are\ created\ and\ verified.\ \(2\)\ Replace\ the\ SHA-256\ hash\ with\ PBKDF2-HMAC-SHA256:\ for\ hashing\,\ generate\ a\ 32-byte\ random\ salt\ \(os.urandom\(32\).hex\(\)\)\,\ run\ hashlib.pbkdf2_hmac\(\'sha256\'\,\ value.encode\(\)\,\ bytes.fromhex\(salt_hex\)\,\ 260000\)\,\ then\ store\ as\ salt_hex\ +\ \':\'\ +\ digest.hex\(\).\ \(3\)\ Update\ the\ verification\ function\ to\ split\ on\ \':\'\,\ extract\ the\ stored\ salt\,\ recompute\ PBKDF2\ with\ the\ same\ salt\,\ and\ compare\ using\ hmac.compare_digest.\ \(4\)\ Do\ NOT\ use\ bcrypt.\ Do\ NOT\ change\ the\ plaintext\ API\ key\ format\ returned\ to\ users\ on\ creation.\ \(5\)\ Existing\ hashed\ keys\ will\ not\ verify\ after\ the\ change\ —\ that\ is\ acceptable\ \(new\ keys\ will\ work\,\ old\ keys\ will\ fail\ and\ need\ rotation\).\ Modify\ ONLY\ app/services/auth.py\,\ do\ NOT\ create\ any\ other\ files.\ Run\ make\ lint\ and\ make\ type-check\ after\ changes.
+BRANCH=agent/fix-security-c1-19
+ENGINE=codex
+MODEL=gpt-5.3-codex
 EVENT_LOG=/home/dotmac/projects/dotmac_starter/.seabone/logs/events.log
 CONFIG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/config.json
 PROJECT_NAME=dotmac_starter

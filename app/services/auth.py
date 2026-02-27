@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 import os
 import secrets
 import time
@@ -39,8 +40,36 @@ from app.services.query_utils import apply_ordering, apply_pagination, validate_
 from app.services.response import ListResponseMixin
 
 
+_API_KEY_PBKDF2_ITERATIONS = 260_000
+_API_KEY_SALT_BYTES = 32
+
+
 def hash_api_key(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+    salt_hex = os.urandom(_API_KEY_SALT_BYTES).hex()
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        value.encode("utf-8"),
+        bytes.fromhex(salt_hex),
+        _API_KEY_PBKDF2_ITERATIONS,
+    )
+    return f"{salt_hex}:{digest.hex()}"
+
+
+def verify_api_key(value: str, stored_hash: str) -> bool:
+    try:
+        salt_hex, digest_hex = stored_hash.split(":", 1)
+        salt = bytes.fromhex(salt_hex)
+        expected_digest = bytes.fromhex(digest_hex)
+    except ValueError:
+        return False
+
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        value.encode("utf-8"),
+        salt,
+        _API_KEY_PBKDF2_ITERATIONS,
+    )
+    return hmac.compare_digest(digest, expected_digest)
 
 
 _API_KEY_WINDOW_SECONDS = 60
