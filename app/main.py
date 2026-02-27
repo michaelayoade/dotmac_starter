@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 from contextlib import asynccontextmanager
 from threading import Lock
 from time import monotonic
@@ -347,6 +348,24 @@ def readiness_check() -> JSONResponse:
 
 
 @app.get("/metrics")
-def metrics() -> Response:
+def metrics(request: Request) -> Response:
+    metrics_token = settings.metrics_token
+    client_host = request.client.host if request.client else "unknown"
+    if metrics_token:
+        auth_header = request.headers.get("Authorization", "")
+        expected = f"Bearer {metrics_token}"
+        if not auth_header or not secrets.compare_digest(auth_header, expected):
+            logger.warning(
+                "Unauthorized /metrics access from %s: missing or invalid bearer token",
+                client_host,
+            )
+            return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+    elif client_host != "127.0.0.1":
+        logger.warning(
+            "Unauthorized /metrics access from %s: loopback-only access",
+            client_host,
+        )
+        return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+
     data = generate_latest()
     return Response(content=data, media_type=CONTENT_TYPE_LATEST)

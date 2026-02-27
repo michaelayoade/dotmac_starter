@@ -81,6 +81,7 @@ class MockSettings:
     s3_endpoint_url = ""
     upload_max_size_bytes = 10 * 1024 * 1024
     upload_allowed_types = "image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/csv"
+    metrics_token = None
 
 
 mock_config_module.settings = MockSettings()
