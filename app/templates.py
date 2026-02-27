@@ -34,6 +34,21 @@ def _nl2br(value: str | None) -> str:
     return escaped.replace("\n", "<br>\n")
 
 
+def _safe_url(value: str | None) -> str:
+    """Allow only relative URLs and HTTP(S) URLs for link/src attributes."""
+    if not value:
+        return ""
+    url = str(value).strip()
+    if not url:
+        return ""
+    lower = url.lower()
+    if url.startswith("/") or lower.startswith("https://") or lower.startswith(
+        "http://"
+    ):
+        return url
+    return ""
+
+
 def _format_date(value: date | datetime | None, fmt: str = "%d %b %Y") -> str:
     """Format a date/datetime for display. Returns empty string for None."""
     if value is None:
@@ -107,6 +122,7 @@ def _timeago(value: datetime | None) -> str:
 
 templates.env.filters["sanitize_html"] = _sanitize_html
 templates.env.filters["nl2br"] = _nl2br
+templates.env.filters["safe_url"] = _safe_url
 templates.env.filters["format_date"] = _format_date
 templates.env.filters["format_datetime"] = _format_datetime
 templates.env.filters["format_currency"] = _format_currency

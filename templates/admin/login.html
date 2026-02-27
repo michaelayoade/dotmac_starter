@@ -5,8 +5,9 @@
     <div class="w-full max-w-md px-6">
         <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-8 border border-slate-200 dark:border-slate-700">
             <div class="text-center mb-8">
-                {% if brand and brand.logo_url %}
-                    <img src="{{ brand.logo_url }}" alt="Logo" class="h-12 w-12 mx-auto mb-4 rounded-xl" />
+                {% set logo_url = brand.logo_url | safe_url if brand else '' %}
+                {% if logo_url %}
+                    <img src="{{ logo_url }}" alt="Logo" class="h-12 w-12 mx-auto mb-4 rounded-xl" />
                 {% else %}
                     <div class="h-12 w-12 mx-auto mb-4 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-bold text-lg">
                         {{ brand.mark if brand and brand.mark else 'A' }}

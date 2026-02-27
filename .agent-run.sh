@@ -3,16 +3,16 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 
 # ---- Injected at spawn time ----
-WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-5
+WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-12
 PROJECT_DIR=/home/dotmac/projects/dotmac_starter
 SCRIPT_DIR=/home/dotmac/.seabone/scripts
 ACTIVE_FILE=/home/dotmac/projects/dotmac_starter/.seabone/active-tasks.json
-LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-5.log
-TASK_ID=fix-security-c1-5
-DESCRIPTION=Remove\ unnecessary\ \'\|\ safe\'\ from\ tojson\ expressions\ in\ two\ admin\ templates.\ The\ \'\|\ safe\'\ filter\ is\ redundant\ and\ harmful\ after\ tojson\ because\ tojson\ already\ HTML-encodes\ output\,\ and\ \'\|\ safe\'\ suppresses\ Jinja2\ auto-escaping.\ Fix\ both\ files:\ \(1\)\ templates/admin/audit/detail.html\ line\ ~59\ —\ change\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \}\}\'\;\ \(2\)\ templates/admin/billing/webhook_events/detail.html\ line\ ~60\ —\ change\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \}\}\'.\ This\ covers\ findings\ security-c1-5\ and\ security-c1-6.
-BRANCH=agent/fix-security-c1-5
-ENGINE=aider
-MODEL=deepseek-chat
+LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-12.log
+TASK_ID=fix-security-c1-12
+DESCRIPTION=Validate\ logo_url\ scheme\ in\ branding\ service\ to\ prevent\ javascript:\ and\ data:\ URI\ injection.\ In\ templates/admin/login.html\ line\ 9\,\ brand.logo_url\ is\ used\ as\ an\ img\ src\ without\ validation.\ Fix:\ \(1\)\ In\ the\ branding\ service\ \(app/services/\ —\ find\ the\ branding-related\ service\)\,\ add\ a\ validate_logo_url\(\)\ function\ that\ checks\ the\ URL\ starts\ with\ \'https://\'\ or\ \'/\'.\ Reject\ javascript:\,\ data:\,\ and\ any\ other\ schemes.\ \(2\)\ Apply\ this\ validation\ before\ persisting\ logo_url\ changes.\ \(3\)\ Optionally\ add\ a\ Jinja2\ global\ filter\ \'safe_url\'\ that\ strips\ non-http\(s\)\ schemes\ as\ defence-in-depth\,\ and\ apply\ it\ in\ login.html:\ \{\{\ brand.logo_url\ \|\ safe_url\ \}\}.\ Run\ make\ lint\ and\ make\ type-check\ after\ changes.
+BRANCH=agent/fix-security-c1-12
+ENGINE=codex
+MODEL=gpt-5.3-codex
 EVENT_LOG=/home/dotmac/projects/dotmac_starter/.seabone/logs/events.log
 CONFIG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/config.json
 PROJECT_NAME=dotmac_starter

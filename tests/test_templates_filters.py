@@ -11,6 +11,7 @@ from app.templates import (
     _format_datetime,
     _format_number,
     _nl2br,
+    _safe_url,
     _sanitize_html,
     _timeago,
 )
@@ -58,6 +59,26 @@ class TestNl2br:
 
     def test_none_returns_empty(self) -> None:
         assert _nl2br(None) == ""
+
+
+class TestSafeUrl:
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            ("https://example.com/logo.svg", "https://example.com/logo.svg"),
+            ("http://example.com/logo.svg", "http://example.com/logo.svg"),
+            ("/static/branding/logo.svg", "/static/branding/logo.svg"),
+            ("javascript:alert(1)", ""),
+            ("data:image/svg+xml;base64,aaa", ""),
+            ("ftp://example.com/logo.svg", ""),
+            (None, ""),
+            ("", ""),
+        ],
+    )
+    def test_safe_url_scheme_enforcement(
+        self, value: str | None, expected: str
+    ) -> None:
+        assert _safe_url(value) == expected
 
 
 class TestFormatDate:

@@ -13,6 +13,18 @@ _SETTING_KEY = "ui_branding"
 _HEX_COLOR = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 
+def validate_logo_url(value: str | None) -> str | None:
+    """Allow only HTTPS absolute URLs or root-relative asset paths."""
+    if value is None:
+        return None
+    url = str(value).strip()
+    if not url:
+        return None
+    if url.startswith("/") or url.lower().startswith("https://"):
+        return url
+    return None
+
+
 def _normalize_hex(value: str | None, fallback: str) -> str:
     if not value:
         return fallback
@@ -67,11 +79,15 @@ def get_branding(db: Session) -> dict[str, Any]:
         .first()
     )
     if not setting or not isinstance(setting.value_json, dict):
+        defaults["logo_url"] = validate_logo_url(defaults.get("logo_url"))
+        defaults["logo_dark_url"] = validate_logo_url(defaults.get("logo_dark_url"))
         return defaults
     data = setting.value_json
     merged = {**defaults, **data}
     merged["primary_color"] = _normalize_hex(merged.get("primary_color"), "#06B6D4")
     merged["accent_color"] = _normalize_hex(merged.get("accent_color"), "#F97316")
+    merged["logo_url"] = validate_logo_url(merged.get("logo_url"))
+    merged["logo_dark_url"] = validate_logo_url(merged.get("logo_dark_url"))
     return merged
 
 
@@ -80,6 +96,8 @@ def save_branding(db: Session, payload: dict[str, Any]) -> dict[str, Any]:
     current.update(payload)
     current["primary_color"] = _normalize_hex(current.get("primary_color"), "#06B6D4")
     current["accent_color"] = _normalize_hex(current.get("accent_color"), "#F97316")
+    current["logo_url"] = validate_logo_url(current.get("logo_url"))
+    current["logo_dark_url"] = validate_logo_url(current.get("logo_dark_url"))
 
     setting = (
         db.query(DomainSetting)
