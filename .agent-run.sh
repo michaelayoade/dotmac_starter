@@ -3,16 +3,16 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 
 # ---- Injected at spawn time ----
-WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-5
+WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-14
 PROJECT_DIR=/home/dotmac/projects/dotmac_starter
 SCRIPT_DIR=/home/dotmac/.seabone/scripts
 ACTIVE_FILE=/home/dotmac/projects/dotmac_starter/.seabone/active-tasks.json
-LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-5.log
-TASK_ID=fix-security-c1-5
-DESCRIPTION=Remove\ unnecessary\ \'\|\ safe\'\ from\ tojson\ expressions\ in\ two\ admin\ templates.\ The\ \'\|\ safe\'\ filter\ is\ redundant\ and\ harmful\ after\ tojson\ because\ tojson\ already\ HTML-encodes\ output\,\ and\ \'\|\ safe\'\ suppresses\ Jinja2\ auto-escaping.\ Fix\ both\ files:\ \(1\)\ templates/admin/audit/detail.html\ line\ ~59\ —\ change\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \}\}\'\;\ \(2\)\ templates/admin/billing/webhook_events/detail.html\ line\ ~60\ —\ change\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \}\}\'.\ This\ covers\ findings\ security-c1-5\ and\ security-c1-6.
-BRANCH=agent/fix-security-c1-5
-ENGINE=aider
-MODEL=deepseek-chat
+LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-14.log
+TASK_ID=fix-security-c1-14
+DESCRIPTION=Add\ magic-byte\ \(file\ signature\)\ verification\ to\ avatar\ upload\ service.\ In\ app/services/avatar.py\ around\ line\ 16\,\ avatar\ validation\ only\ checks\ the\ client-supplied\ Content-Type\ header\,\ which\ can\ be\ forged.\ The\ branding_assets\ service\ already\ has\ a\ _sniff_content_type\(\)\ method\ that\ reads\ magic\ bytes\ —\ apply\ the\ same\ pattern\ here.\ Fix:\ \(1\)\ Read\ the\ first\ 512\ bytes\ of\ the\ uploaded\ file.\ \(2\)\ Detect\ the\ actual\ file\ type\ from\ magic\ bytes\ \(JPEG:\ FF\ D8\ FF\,\ PNG:\ 89\ 50\ 4E\ 47\,\ GIF:\ 47\ 49\ 46\ 38\,\ WebP:\ 52\ 49\ 46\ 46\).\ \(3\)\ Reject\ uploads\ where\ the\ detected\ type\ doesn\'t\ match\ the\ allowed\ image\ types.\ \(4\)\ You\ may\ use\ python-magic\ if\ already\ installed\,\ or\ implement\ minimal\ magic\ byte\ checks\ inline\ as\ the\ branding\ service\ does.\ Run\ make\ lint\ and\ make\ type-check\ after\ changes.
+BRANCH=agent/fix-security-c1-14
+ENGINE=codex
+MODEL=gpt-5.3-codex
 EVENT_LOG=/home/dotmac/projects/dotmac_starter/.seabone/logs/events.log
 CONFIG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/config.json
 PROJECT_NAME=dotmac_starter
