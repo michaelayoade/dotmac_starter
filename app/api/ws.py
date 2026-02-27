@@ -29,13 +29,25 @@ def _authenticate_ws(token: str) -> str | None:
         db.close()
 
 
+def _extract_ws_token(websocket: WebSocket) -> str:
+    """Read JWT token from Sec-WebSocket-Protocol header."""
+    raw_header = websocket.headers.get("sec-websocket-protocol", "")
+    if not raw_header:
+        return ""
+    for protocol in raw_header.split(","):
+        protocol = protocol.strip()
+        if protocol:
+            return protocol
+    return ""
+
+
 @router.websocket("/ws/notifications")
 async def ws_notifications(websocket: WebSocket) -> None:
     """WebSocket endpoint for real-time notification push.
 
-    Authenticate via query param: /ws/notifications?token=<JWT>
+    Authenticate via Sec-WebSocket-Protocol header.
     """
-    token = websocket.query_params.get("token", "")
+    token = _extract_ws_token(websocket)
     person_id_str = _authenticate_ws(token)
     if not person_id_str:
         await websocket.close(code=4001, reason="Unauthorized")
@@ -44,7 +56,7 @@ async def ws_notifications(websocket: WebSocket) -> None:
     from uuid import UUID
 
     person_id = UUID(person_id_str)
-    await ws_manager.connect(person_id, websocket)
+    await ws_manager.connect(person_id, websocket, subprotocol=token)
     try:
         while True:
             # Keep connection alive; client can send pings

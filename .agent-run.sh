@@ -3,16 +3,16 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 
 # ---- Injected at spawn time ----
-WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-5
+WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-8
 PROJECT_DIR=/home/dotmac/projects/dotmac_starter
 SCRIPT_DIR=/home/dotmac/.seabone/scripts
 ACTIVE_FILE=/home/dotmac/projects/dotmac_starter/.seabone/active-tasks.json
-LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-5.log
-TASK_ID=fix-security-c1-5
-DESCRIPTION=Remove\ unnecessary\ \'\|\ safe\'\ from\ tojson\ expressions\ in\ two\ admin\ templates.\ The\ \'\|\ safe\'\ filter\ is\ redundant\ and\ harmful\ after\ tojson\ because\ tojson\ already\ HTML-encodes\ output\,\ and\ \'\|\ safe\'\ suppresses\ Jinja2\ auto-escaping.\ Fix\ both\ files:\ \(1\)\ templates/admin/audit/detail.html\ line\ ~59\ —\ change\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \}\}\'\;\ \(2\)\ templates/admin/billing/webhook_events/detail.html\ line\ ~60\ —\ change\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \}\}\'.\ This\ covers\ findings\ security-c1-5\ and\ security-c1-6.
-BRANCH=agent/fix-security-c1-5
-ENGINE=aider
-MODEL=deepseek-chat
+LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-8.log
+TASK_ID=fix-security-c1-8
+DESCRIPTION=Move\ WebSocket\ JWT\ authentication\ from\ URL\ query\ parameter\ to\ a\ safer\ mechanism.\ In\ app/api/ws.py\ around\ line\ 38\,\ the\ WebSocket\ connection\ URL\ includes\ the\ JWT\ as\ \?token=\<JWT\>\,\ which\ gets\ logged\ in\ server\ access\ logs\ and\ browser\ history.\ Fix:\ \(1\)\ Accept\ the\ token\ via\ the\ Sec-WebSocket-Protocol\ subprotocol\ header\ instead\ of\ a\ query\ param.\ In\ the\ WebSocket\ handshake\,\ read\ the\ token\ from\ the\ protocol\ header\,\ validate\ it\,\ then\ echo\ back\ the\ same\ protocol\ header.\ \(2\)\ Update\ the\ client-side\ JavaScript\ \(look\ in\ static/\ or\ templates/\ for\ the\ WebSocket\ connection\ code\)\ to\ pass\ the\ token\ via\ the\ subprotocol\ option:\ new\ WebSocket\(url\,\ \[token\]\).\ \(3\)\ Remove\ the\ \?token=\ query\ param\ handling.\ Run\ make\ lint\ and\ make\ type-check\ after\ changes.
+BRANCH=agent/fix-security-c1-8
+ENGINE=codex
+MODEL=gpt-5.3-codex
 EVENT_LOG=/home/dotmac/projects/dotmac_starter/.seabone/logs/events.log
 CONFIG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/config.json
 PROJECT_NAME=dotmac_starter
