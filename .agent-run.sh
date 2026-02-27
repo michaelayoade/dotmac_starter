@@ -3,16 +3,16 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 
 # ---- Injected at spawn time ----
-WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-5
+WORKTREE_DIR=/home/dotmac/projects/dotmac_starter/.worktrees/fix-security-c1-7
 PROJECT_DIR=/home/dotmac/projects/dotmac_starter
 SCRIPT_DIR=/home/dotmac/.seabone/scripts
 ACTIVE_FILE=/home/dotmac/projects/dotmac_starter/.seabone/active-tasks.json
-LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-5.log
-TASK_ID=fix-security-c1-5
-DESCRIPTION=Remove\ unnecessary\ \'\|\ safe\'\ from\ tojson\ expressions\ in\ two\ admin\ templates.\ The\ \'\|\ safe\'\ filter\ is\ redundant\ and\ harmful\ after\ tojson\ because\ tojson\ already\ HTML-encodes\ output\,\ and\ \'\|\ safe\'\ suppresses\ Jinja2\ auto-escaping.\ Fix\ both\ files:\ \(1\)\ templates/admin/audit/detail.html\ line\ ~59\ —\ change\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.details\ \|\ tojson\(indent=2\)\ \}\}\'\;\ \(2\)\ templates/admin/billing/webhook_events/detail.html\ line\ ~60\ —\ change\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \|\ safe\ \}\}\'\ to\ \'\{\{\ event.payload\ \|\ tojson\(indent=2\)\ \}\}\'.\ This\ covers\ findings\ security-c1-5\ and\ security-c1-6.
-BRANCH=agent/fix-security-c1-5
-ENGINE=aider
-MODEL=deepseek-chat
+LOG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/logs/fix-security-c1-7.log
+TASK_ID=fix-security-c1-7
+DESCRIPTION=Remove\ unsafe-inline\ and\ unsafe-eval\ from\ Content-Security-Policy.\ In\ app/middleware/security_headers.py\ around\ line\ 43\,\ the\ CSP\ script-src\ directive\ includes\ \'unsafe-inline\'\ and\ \'unsafe-eval\'\,\ neutralising\ XSS\ protection.\ This\ is\ a\ large\ refactor.\ Fix:\ \(1\)\ Audit\ all\ templates\ for\ inline\ \<script\>\ blocks\ and\ inline\ event\ handlers\ \(onclick\,\ onload\,\ etc.\).\ \(2\)\ Move\ inline\ scripts\ to\ external\ .js\ files\ in\ static/.\ \(3\)\ For\ any\ Alpine.js\ or\ HTMX\ inline\ initialization\ that\ cannot\ be\ moved\,\ implement\ CSP\ nonces:\ generate\ a\ per-request\ nonce\,\ inject\ it\ via\ request.state\,\ add\ it\ to\ the\ CSP\ header\ as\ \'nonce-\<value\>\'\,\ and\ add\ nonce=\'\{\{\ request.state.csp_nonce\ \}\}\'\ to\ script\ tags.\ \(4\)\ Remove\ \'unsafe-inline\'\ from\ the\ CSP\ once\ all\ inline\ scripts\ are\ handled.\ Remove\ \'unsafe-eval\'\ if\ no\ eval\(\)\ usage\ exists.\ \(5\)\ Test\ that\ all\ admin\ UI\ pages\ still\ function.\ Run\ make\ lint\ after\ changes.
+BRANCH=agent/fix-security-c1-7
+ENGINE=claude
+MODEL=sonnet
 EVENT_LOG=/home/dotmac/projects/dotmac_starter/.seabone/logs/events.log
 CONFIG_FILE=/home/dotmac/projects/dotmac_starter/.seabone/config.json
 PROJECT_NAME=dotmac_starter

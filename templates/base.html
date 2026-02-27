@@ -11,57 +11,27 @@
     <meta name="csrf-token" content="{{ csrf_value | default('', true) }}" />
     <title>{% block title %}{{ title | default("Starter Template") }}{% endblock %}</title>
 
+    <!-- Dark mode initialisation — must run synchronously before CSS to prevent FOUC.
+         Uses a per-request CSP nonce so unsafe-inline is not required in script-src. -->
+    <script nonce="{{ request.state.csp_nonce if request is defined else '' }}">
+        if (
+            localStorage.getItem("darkMode") === null &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches
+        ) {
+            localStorage.setItem("darkMode", "true");
+            document.documentElement.classList.add("dark");
+        }
+    </script>
+
     <!-- Custom Fonts: Outfit (display) + Plus Jakarta Sans (body) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     {% include "partials/_org_branding_head.html" %}
 
-    <!-- Tailwind CSS -->
+    <!-- Tailwind CSS — config must load synchronously immediately after -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'],
-                        display: ['Outfit', 'system-ui', 'sans-serif'],
-                    },
-                    colors: {
-                        // Distinctive teal-cyan palette with warmth
-                        primary: {
-                            50: '#ecfeff',
-                            100: '#cffafe',
-                            200: '#a5f3fc',
-                            300: '#67e8f9',
-                            400: '#22d3ee',
-                            500: '#06b6d4',
-                            600: '#0891b2',
-                            700: '#0e7490',
-                            800: '#155e75',
-                            900: '#164e63',
-                            950: '#083344',
-                        },
-                        // Warm accent for contrast
-                        accent: {
-                            50: '#fff7ed',
-                            100: '#ffedd5',
-                            200: '#fed7aa',
-                            300: '#fdba74',
-                            400: '#fb923c',
-                            500: '#f97316',
-                            600: '#ea580c',
-                            700: '#c2410c',
-                            800: '#9a3412',
-                            900: '#7c2d12',
-                            950: '#431407',
-                        }
-                    }
-                }
-            }
-        }
-    </script>
+    <script src="/static/js/tailwind.config.js"></script>
 
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@2.0.0"></script>
@@ -69,43 +39,6 @@
 
     <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <script>
-        document.addEventListener("DOMContentLoaded", () => {
-            if (window.Alpine) {
-                return;
-            }
-            const menus = new Map();
-            document.querySelectorAll("[data-dropdown-trigger]").forEach((trigger) => {
-                const menuId = trigger.getAttribute("data-dropdown-trigger");
-                if (!menuId) {
-                    return;
-                }
-                const menu = document.getElementById(menuId);
-                if (!menu) {
-                    return;
-                }
-                menu.removeAttribute("x-cloak");
-                menu.style.display = "none";
-                menus.set(menuId, { trigger, menu });
-                trigger.addEventListener("click", (event) => {
-                    event.stopPropagation();
-                    const isOpen = menu.style.display !== "none";
-                    menu.style.display = isOpen ? "none" : "block";
-                });
-            });
-            document.addEventListener("click", (event) => {
-                menus.forEach(({ trigger, menu }) => {
-                    if (menu.style.display === "none") {
-                        return;
-                    }
-                    if (menu.contains(event.target) || trigger.contains(event.target)) {
-                        return;
-                    }
-                    menu.style.display = "none";
-                });
-            });
-        });
-    </script>
 
     <!-- Custom Styles -->
     <style>
@@ -239,7 +172,8 @@
     {% block head %}{% endblock %}
 </head>
 <body class="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-100 antialiased"
-      hx-ext="loading-states">
+      hx-ext="loading-states"
+      data-auth-enabled="{{ 'true' if user is defined and user and user.is_authenticated else 'false' }}">
     {% include "partials/_brand_context.html" %}
 
     {% block body %}
@@ -279,55 +213,6 @@
     </div>
     {% endblock %}
 
-    <!-- CSRF Auto-Injection: injects token into all POST forms, HTMX requests, and fetch() calls -->
-    <script>
-        (function() {
-            const meta = document.querySelector('meta[name="csrf-token"]');
-            const token = meta ? meta.getAttribute('content') : '';
-            if (!token) return;
-
-            function ensureToken(form) {
-                const method = (form.getAttribute('method') || 'get').toLowerCase();
-                if (method !== 'post') return;
-                if (form.querySelector('input[name="csrf_token"]')) return;
-                const input = document.createElement('input');
-                input.type = 'hidden';
-                input.name = 'csrf_token';
-                input.value = token;
-                form.appendChild(input);
-            }
-
-            function scanForms(root) {
-                const scope = root || document;
-                scope.querySelectorAll('form').forEach(ensureToken);
-            }
-
-            scanForms();
-
-            // Inject CSRF header into all HTMX requests
-            document.body.addEventListener('htmx:configRequest', function(event) {
-                event.detail.headers['X-CSRF-Token'] = token;
-            });
-
-            // Re-scan forms after HTMX swaps in new content
-            document.body.addEventListener('htmx:afterSwap', function(event) {
-                scanForms(event.target);
-            });
-
-            // Monkey-patch fetch() to include CSRF header
-            const originalFetch = window.fetch;
-            window.fetch = function(resource, options) {
-                const opts = options || {};
-                const headers = new Headers(opts.headers || {});
-                if (!headers.has('X-CSRF-Token')) {
-                    headers.set('X-CSRF-Token', token);
-                }
-                opts.headers = headers;
-                return originalFetch(resource, opts);
-            };
-        })();
-    </script>
-
     <!-- Toast Notification Container -->
     <div id="toast-container"
          x-data="toastStore()"
@@ -361,211 +246,12 @@
         </template>
     </div>
 
-    <!-- Global Scripts -->
-    <script>
-        // Toast notification store
-        function toastStore() {
-            return {
-                toasts: [],
-                addToast(detail) {
-                    const id = Date.now();
-                    this.toasts.push({
-                        id,
-                        message: detail.message,
-                        type: detail.type || 'info',
-                        visible: true
-                    });
-                    setTimeout(() => this.removeToast(id), detail.duration || 4000);
-                },
-                removeToast(id) {
-                    const toast = this.toasts.find(t => t.id === id);
-                    if (toast) {
-                        toast.visible = false;
-                        setTimeout(() => {
-                            this.toasts = this.toasts.filter(t => t.id !== id);
-                        }, 300);
-                    }
-                }
-            }
-        }
-
-        // Global helper: window.showToast('message', 'success')
-        window.showToast = function(message, type, duration) {
-            window.dispatchEvent(new CustomEvent('show-toast', {
-                detail: { message, type: type || 'info', duration: duration || 4000 }
-            }));
-        };
-
-        // ═══════════════════════════════════════════════════════════════════
-        // Query-Parameter Toast Consumer
-        // Shows toast messages from URL params (?success=, ?error=, etc.)
-        // then cleans the URL to prevent re-display on refresh.
-        // ═══════════════════════════════════════════════════════════════════
-        (function consumeQueryMessages() {
-            const params = new URLSearchParams(window.location.search);
-            const keys = ["error", "success", "warning", "info", "created", "updated", "deleted"];
-            let changed = false;
-
-            keys.forEach(function(key) {
-                if (!params.has(key)) return;
-                const value = params.get(key);
-                if (value) {
-                    const type =
-                        key === "error" ? "error" :
-                        key === "warning" ? "warning" :
-                        key === "info" ? "info" :
-                        "success";
-                    window.dispatchEvent(new CustomEvent("show-toast", {
-                        detail: { message: value, type: type }
-                    }));
-                }
-                params.delete(key);
-                changed = true;
-            });
-
-            if (changed) {
-                const newQuery = params.toString();
-                const newUrl = window.location.pathname + (newQuery ? "?" + newQuery : "") + window.location.hash;
-                window.history.replaceState({}, "", newUrl);
-            }
-        })();
-
-        // HTMX event listeners for toasts
-        document.body.addEventListener('htmx:afterRequest', function(evt) {
-            const trigger = evt.detail.xhr.getResponseHeader('HX-Trigger');
-            if (trigger) {
-                try {
-                    const data = JSON.parse(trigger);
-                    if (data.showToast) {
-                        window.dispatchEvent(new CustomEvent('show-toast', { detail: data.showToast }));
-                    }
-                } catch (e) {}
-            }
-        });
-
-        // Dark mode system preference detection
-        if (localStorage.getItem('darkMode') === null) {
-            if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-                localStorage.setItem('darkMode', 'true');
-                document.documentElement.classList.add('dark');
-            }
-        }
-
-        window.__authEnabled = {% if user is defined and user and user.is_authenticated %}true{% else %}false{% endif %};
-
-        // ═══════════════════════════════════════════════════════════════════
-        // Automatic Token Refresh Manager
-        // Keeps users logged in by refreshing access tokens periodically
-        // ═══════════════════════════════════════════════════════════════════
-        (function() {
-            var REFRESH_INTERVAL_MS = 10 * 60 * 1000;   // Every 10 minutes
-            var MIN_REFRESH_INTERVAL_MS = 30000;          // Don't refresh more than once per 30s
-
-            var refreshTimeoutId = null;
-            var lastRefreshTime = 0;
-            var refreshDisabled = false;
-            var refreshInProgress = false;
-
-            async function refreshToken() {
-                if (!window.__authEnabled || refreshDisabled || refreshInProgress) return;
-                var currentPath = window.location.pathname;
-                if (currentPath === '/login' || currentPath === '/admin/login') return;
-                var now = Date.now();
-                if (now - lastRefreshTime < MIN_REFRESH_INTERVAL_MS) {
-                    scheduleNextRefresh();
-                    return;
-                }
-
-                refreshInProgress = true;
-                try {
-                    var response = await fetch('/auth/refresh', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'include',
-                        body: JSON.stringify({}),
-                    });
-
-                    if (response.ok) {
-                        await response.json();
-                        lastRefreshTime = Date.now();
-                        console.debug('[Auth] Token refreshed successfully');
-                    } else if (response.status === 401) {
-                        console.debug('[Auth] Session expired, redirecting to login');
-                        refreshDisabled = true;
-                        var redirectTarget = window.location.pathname + window.location.search;
-                        if (currentPath !== '/login' && currentPath !== '/') {
-                            window.location.href = '/login?next=' + encodeURIComponent(redirectTarget);
-                        }
-                        return;
-                    }
-                } catch (e) {
-                    console.debug('[Auth] Token refresh failed:', e.message);
-                } finally {
-                    refreshInProgress = false;
-                }
-
-                scheduleNextRefresh();
-            }
-
-            function scheduleNextRefresh() {
-                if (!window.__authEnabled || refreshDisabled) return;
-                if (refreshTimeoutId) clearTimeout(refreshTimeoutId);
-                refreshTimeoutId = setTimeout(refreshToken, REFRESH_INTERVAL_MS);
-            }
-
-            function onUserActivity() {
-                if (!window.__authEnabled || refreshDisabled) return;
-                if (Date.now() - lastRefreshTime < MIN_REFRESH_INTERVAL_MS) return;
-                scheduleNextRefresh();
-            }
-
-            ['click', 'keydown', 'scroll', 'touchstart'].forEach(function(event) {
-                document.addEventListener(event, onUserActivity, { passive: true });
-            });
-
-            if (window.__authEnabled) scheduleNextRefresh();
-
-            document.addEventListener('visibilitychange', function() {
-                if (document.visibilityState === 'visible' && window.__authEnabled && !refreshDisabled) {
-                    var elapsed = Date.now() - lastRefreshTime;
-                    if (elapsed >= REFRESH_INTERVAL_MS) {
-                        refreshToken();
-                    } else {
-                        scheduleNextRefresh();
-                    }
-                }
-            });
-        })();
-
-        // ═══════════════════════════════════════════════════════════════════
-        // Form Double-Submit Protection
-        // Disables submit buttons after first click to prevent duplicates
-        // ═══════════════════════════════════════════════════════════════════
-        document.addEventListener('DOMContentLoaded', function() {
-            document.addEventListener('submit', function(e) {
-                var form = e.target;
-                if (!form || form.tagName !== 'FORM') return;
-                var method = (form.method || 'GET').toUpperCase();
-                if (method !== 'POST') return;
-
-                var btn = form.querySelector('button[type="submit"], input[type="submit"]');
-                if (btn && !btn.disabled) {
-                    btn.disabled = true;
-                    btn.dataset.originalText = btn.textContent;
-                    btn.textContent = 'Processing\u2026';
-                    // Re-enable after 8s in case of error (no redirect)
-                    setTimeout(function() {
-                        btn.disabled = false;
-                        if (btn.dataset.originalText) {
-                            btn.textContent = btn.dataset.originalText;
-                        }
-                    }, 8000);
-                }
-            });
-        });
-    </script>
-
     {% block scripts %}{% endblock %}
+
+    <!-- External application scripts (no inline JS — safe with strict CSP) -->
+    <script defer src="/static/js/dropdown.js"></script>
+    <script defer src="/static/js/csrf.js"></script>
+    <script defer src="/static/js/app.js"></script>
     <script defer src="/static/js/typeahead.js"></script>
     <script defer src="/static/js/avatar.js"></script>
 </body>
