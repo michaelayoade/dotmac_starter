@@ -6,6 +6,7 @@ import secrets
 from contextlib import asynccontextmanager
 from threading import Lock
 from time import monotonic
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from fastapi import Depends, FastAPI, Request
@@ -83,11 +84,7 @@ setup_otel(app)
 register_error_handlers(app)
 
 # CORS — must be added before other middleware
-cors_origins = [
-    o.strip()
-    for o in settings.cors_origins.split(",")
-    if o.strip()
-]
+cors_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 if cors_origins:
     app.add_middleware(
         CORSMiddleware,
@@ -110,16 +107,26 @@ app.add_middleware(ObservabilityMiddleware)
 
 
 @app.middleware("http")
-async def audit_middleware(request: Request, call_next: object) -> Response:
+async def audit_middleware(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     response: Response
     path = request.url.path
-    db = SessionLocal()
     try:
-        audit_settings = _load_audit_settings(db)
-    finally:
-        db.close()
+        db = SessionLocal()
+        try:
+            audit_settings = _load_audit_settings(db)
+        finally:
+            db.close()
+    except Exception:
+        logger.exception(
+            "Failed to load audit settings, skipping audit for %s %s",
+            request.method,
+            path,
+        )
+        return await call_next(request)
     if not audit_settings["enabled"]:
-        return await call_next(request)  # type: ignore[call-arg]
+        return await call_next(request)
     header_key = audit_settings.get("read_trigger_header") or ""
     header_value = request.headers.get(header_key, "") if header_key else ""
     track_read = request.method == "GET" and (
@@ -130,13 +137,19 @@ async def audit_middleware(request: Request, call_next: object) -> Response:
     if _is_audit_path_skipped(path, audit_settings["skip_paths"]):
         should_log = False
     try:
-        response = await call_next(request)  # type: ignore[call-arg]
+        response = await call_next(request)
     except Exception:
         if should_log:
             db = SessionLocal()
             try:
                 audit_service.audit_events.log_request(
                     db, request, Response(status_code=500)
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to log audit event for %s %s",
+                    request.method,
+                    path,
                 )
             finally:
                 db.close()
@@ -145,6 +158,12 @@ async def audit_middleware(request: Request, call_next: object) -> Response:
         db = SessionLocal()
         try:
             audit_service.audit_events.log_request(db, request, response)
+        except Exception:
+            logger.exception(
+                "Failed to log audit event for %s %s",
+                request.method,
+                path,
+            )
         finally:
             db.close()
     return response
@@ -304,6 +323,7 @@ async def web_auth_redirect_handler(request: Request, exc: WebAuthRedirect) -> R
 
     next_url = exc.next_url or request.url.path
     return RedirectResponse(url=f"/admin/login?next={next_url}", status_code=302)
+
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
