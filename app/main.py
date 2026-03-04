@@ -25,7 +25,7 @@ from app.api.rbac import router as rbac_router
 from app.api.scheduler import router as scheduler_router
 from app.api.settings import router as settings_router
 from app.config import settings, validate_settings
-from app.db import SessionLocal
+from app.db import Base, SessionLocal, get_engine
 from app.errors import register_error_handlers
 from app.logging import configure_logging
 from app.middleware.csrf import CSRFMiddleware
@@ -53,6 +53,9 @@ async def lifespan(app: FastAPI):  # type: ignore[arg-type]
     warnings = validate_settings(settings)
     for w in warnings:
         logger.warning("Config warning: %s", w)
+
+    # Ensure schema exists in fresh environments (e.g. CI Docker health check).
+    Base.metadata.create_all(bind=get_engine())
 
     # Seed default settings
     db = SessionLocal()

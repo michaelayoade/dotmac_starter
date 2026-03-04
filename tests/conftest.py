@@ -190,14 +190,20 @@ def auth_env():
 
 
 @pytest.fixture()
-def client(db_session):
+def client(engine):
     """Create a test client with database dependency override."""
     from app.main import app
     from app.api.deps import get_db as api_get_db
     from app.services.auth_dependencies import _get_db as auth_deps_get_db
 
+    Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
     def override_get_db():
-        yield db_session
+        db = Session()
+        try:
+            yield db
+        finally:
+            db.close()
 
     # Override shared db dependencies
     app.dependency_overrides[api_get_db] = override_get_db
