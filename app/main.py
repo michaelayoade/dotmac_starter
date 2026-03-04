@@ -55,7 +55,9 @@ async def lifespan(app: FastAPI):  # type: ignore[arg-type]
         logger.warning("Config warning: %s", w)
 
     # Ensure schema exists in fresh environments (e.g. CI Docker health check).
-    Base.metadata.create_all(bind=get_engine())
+    # Tests can disable this via env to avoid startup DB lock contention.
+    if os.getenv("SKIP_DB_SCHEMA_CREATE", "").lower() not in {"1", "true", "yes", "on"}:
+        Base.metadata.create_all(bind=get_engine())
 
     # Seed default settings
     db = SessionLocal()

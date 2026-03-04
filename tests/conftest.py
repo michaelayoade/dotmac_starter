@@ -97,6 +97,7 @@ os.environ["JWT_SECRET"] = "test-secret"
 os.environ["JWT_ALGORITHM"] = "HS256"
 os.environ["TOTP_ENCRYPTION_KEY"] = "QLUJktsTSfZEbST4R-37XmQ0tCkiVCBXZN2Zt053w8g="
 os.environ["TOTP_ISSUER"] = "StarterTemplate"
+os.environ["SKIP_DB_SCHEMA_CREATE"] = "1"
 
 # Now import the models - they'll use our mocked db module
 from app.models.person import Person
