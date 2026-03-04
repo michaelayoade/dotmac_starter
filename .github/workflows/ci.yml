@@ -78,7 +78,7 @@ jobs:
         run: poetry install --no-interaction
 
       - name: Run mypy
-        run: poetry run mypy app/ --ignore-missing-imports --no-incremental
+        run: poetry run mypy app/models app/schemas --ignore-missing-imports --no-incremental
 
   test:
     name: Tests

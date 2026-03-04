@@ -1,4 +1,5 @@
 """Web authentication routes — login and logout pages."""
+
 from __future__ import annotations
 
 import logging
@@ -41,7 +42,9 @@ def login_page(
     )
 
 
-def _login_error(request: Request, db: Session, message: str, next_url: str) -> HTMLResponse:
+def _login_error(
+    request: Request, db: Session, message: str, next_url: str
+) -> HTMLResponse:
     branding = load_branding_context(db)
     return templates.TemplateResponse(
         "admin/login.html",
@@ -83,7 +86,9 @@ async def login_submit(
         return _login_error(request, db, "Invalid username or password", next_url)
 
     if result.get("mfa_required"):
-        return _login_error(request, db, "MFA is not yet supported in web login", next_url)
+        return _login_error(
+            request, db, "MFA is not yet supported in web login", next_url
+        )
 
     access_token = result.get("access_token", "")
     refresh_token = result.get("refresh_token", "")

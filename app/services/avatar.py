@@ -16,17 +16,13 @@ def get_allowed_types() -> set[str]:
 
 
 def _sniff_content_type(content: bytes) -> str | None:
-    if content.startswith(b"\xFF\xD8\xFF"):
+    if content.startswith(b"\xff\xd8\xff"):
         return "image/jpeg"
     if content.startswith(b"\x89PNG\r\n\x1a\n"):
         return "image/png"
     if content.startswith((b"GIF87a", b"GIF89a")):
         return "image/gif"
-    if (
-        content.startswith(b"RIFF")
-        and len(content) >= 12
-        and content[8:12] == b"WEBP"
-    ):
+    if content.startswith(b"RIFF") and len(content) >= 12 and content[8:12] == b"WEBP":
         return "image/webp"
     return None
 

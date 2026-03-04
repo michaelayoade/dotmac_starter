@@ -3,10 +3,10 @@ from __future__ import annotations
 import logging
 import os
 import secrets
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from threading import Lock
 from time import monotonic
-from collections.abc import Awaitable, Callable
 from typing import Any
 
 from fastapi import Depends, FastAPI, Request
@@ -350,7 +350,7 @@ def readiness_check() -> JSONResponse:
             checks["database"] = "ok"
         finally:
             db.close()
-    except Exception as e:
+    except Exception:
         logger.exception("Database health check failed")
         checks["database"] = "unavailable"
 
@@ -363,7 +363,7 @@ def readiness_check() -> JSONResponse:
         )
         r.ping()
         checks["redis"] = "ok"
-    except Exception as e:
+    except Exception:
         logger.exception("Redis health check failed")
         checks["redis"] = "unavailable"
 

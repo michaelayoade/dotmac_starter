@@ -2,6 +2,7 @@
 
 Protects login, password reset, and MFA verification from brute-force attacks.
 """
+
 from __future__ import annotations
 
 import logging
@@ -24,10 +25,10 @@ logger = logging.getLogger(__name__)
 
 # Paths and their rate limit configs: (max_requests, window_seconds)
 _RATE_LIMIT_PATHS: dict[str, tuple[int, int]] = {
-    "/auth/login": (10, 60),           # 10 attempts per minute
+    "/auth/login": (10, 60),  # 10 attempts per minute
     "/auth/password-reset": (5, 300),  # 5 attempts per 5 minutes
-    "/auth/mfa/verify": (10, 60),      # 10 attempts per minute
-    "/auth/register": (5, 300),        # 5 registrations per 5 minutes
+    "/auth/mfa/verify": (10, 60),  # 10 attempts per minute
+    "/auth/register": (5, 300),  # 5 registrations per 5 minutes
 }
 AUTH_PATHS: set[str] = {
     "/auth/login",
@@ -106,7 +107,9 @@ def _get_redis() -> object | None:
 
 
 def _is_auth_path(path: str) -> bool:
-    return any(path.startswith(auth_path) or auth_path in path for auth_path in AUTH_PATHS)
+    return any(
+        path.startswith(auth_path) or auth_path in path for auth_path in AUTH_PATHS
+    )
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -130,7 +133,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         path = request.url.path
         # Also check /api/v1 prefixed versions
-        clean_path = path.replace("/api/v1", "", 1) if path.startswith("/api/v1") else path
+        clean_path = (
+            path.replace("/api/v1", "", 1) if path.startswith("/api/v1") else path
+        )
 
         config = _RATE_LIMIT_PATHS.get(clean_path)
         if not config:
@@ -140,7 +145,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         r = self._ensure_redis()
         if r is None:
             if _is_auth_path(clean_path):
-                logger.warning("Rate limiter: Redis unavailable on auth path %s", clean_path)
+                logger.warning(
+                    "Rate limiter: Redis unavailable on auth path %s", clean_path
+                )
                 return JSONResponse(
                     status_code=503,
                     content={"detail": "Service temporarily unavailable"},

@@ -4,6 +4,7 @@ Implements a double-submit cookie check:
 - Sets a CSRF cookie and `request.state.csrf_token` on safe requests.
 - Validates form submissions by matching submitted token to cookie.
 """
+
 from __future__ import annotations
 
 import re
@@ -20,7 +21,7 @@ _FORM_CONTENT_TYPES = {
     "multipart/form-data",
     "text/plain",
 }
-_TOKEN_PATTERN = re.compile(r'^[A-Za-z0-9_-]{32,}$')
+_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{32,}$")
 
 
 def _is_secure_request(request: Request) -> bool:
@@ -49,7 +50,11 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         return secrets.token_urlsafe(32), True
 
     def _is_exempt_path(self, path: str) -> bool:
-        return path.startswith("/static") or path.startswith("/health") or path == "/metrics"
+        return (
+            path.startswith("/static")
+            or path.startswith("/health")
+            or path == "/metrics"
+        )
 
     def _requires_csrf(self, request: Request) -> bool:
         if request.method in _SAFE_METHODS:
@@ -73,7 +78,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
 
         if self._requires_csrf(request):
             submitted_token = await self._submitted_token(request)
-            
+
             # Validate submitted token exists and has correct format
             if not submitted_token or not _is_valid_token(submitted_token):
                 return JSONResponse(
@@ -84,7 +89,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                         "details": None,
                     },
                 )
-            
+
             # csrf_token is already validated in _ensure_token()
             # Use constant-time comparison for the actual token match
             if not compare_digest(submitted_token, csrf_token):
