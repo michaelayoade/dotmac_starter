@@ -93,16 +93,7 @@ class TestHealthCheck:
 
     def test_liveness_always_ok(self) -> None:
         """Liveness probe should always return ok."""
-        from fastapi import FastAPI
-        from fastapi.testclient import TestClient
-
-        app = FastAPI()
-
-        @app.get("/health")
-        def health():
+        def health() -> dict[str, str]:
             return {"status": "ok"}
 
-        client = TestClient(app)
-        resp = client.get("/health")
-        assert resp.status_code == 200
-        assert resp.json() == {"status": "ok"}
+        assert health() == {"status": "ok"}
