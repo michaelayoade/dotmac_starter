@@ -7,7 +7,7 @@
 </div>
 
 {% if notifications %}
-<div class="space-y-3">
+<div id="results-container" class="space-y-3">
     {% for notification in notifications %}
     <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 {{ 'border-l-4 border-l-primary-500' if not notification.read_at else '' }}">
         <div class="flex items-start justify-between gap-4">
