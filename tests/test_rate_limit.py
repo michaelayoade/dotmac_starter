@@ -51,9 +51,8 @@ class TestRateLimitMiddleware:
         assert resp.status_code == 200
 
     @patch("app.middleware.rate_limit._get_redis", return_value=None)
-    def test_allows_when_redis_unavailable(self, mock_redis: MagicMock) -> None:
-        """Fail-open: if Redis is unavailable, requests are allowed."""
-        # Create a fresh app so the middleware hasn't cached Redis yet
+    def test_blocks_auth_when_redis_unavailable(self, mock_redis: MagicMock) -> None:
+        """Fail-closed: auth paths return 503 when Redis is unavailable."""
         fresh_app = FastAPI()
         fresh_app.add_middleware(RateLimitMiddleware)
 
@@ -63,6 +62,20 @@ class TestRateLimitMiddleware:
 
         with TestClient(fresh_app) as c:
             resp = c.post("/auth/login")
+        assert resp.status_code == 503
+
+    @patch("app.middleware.rate_limit._get_redis", return_value=None)
+    def test_allows_non_auth_when_redis_unavailable(self, mock_redis: MagicMock) -> None:
+        """Fail-open: non-auth paths are allowed when Redis is unavailable."""
+        fresh_app = FastAPI()
+        fresh_app.add_middleware(RateLimitMiddleware)
+
+        @fresh_app.post("/other")
+        def other():
+            return {"ok": True}
+
+        with TestClient(fresh_app) as c:
+            resp = c.post("/other")
         assert resp.status_code == 200
 
     @patch("app.middleware.rate_limit._get_redis")

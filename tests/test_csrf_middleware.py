@@ -69,9 +69,10 @@ def test_does_not_require_csrf_for_exempt_path() -> None:
 
 def test_ensure_token_reuses_cookie_token() -> None:
     middleware = _middleware()
-    request = _request("GET", "/", cookies={"csrf_token": "a" * 24})
+    valid_token = "abcdefghijklmnopqrstuvwxyz012345"  # 32 chars, valid pattern
+    request = _request("GET", "/", cookies={"csrf_token": valid_token})
     token, should_set = middleware._ensure_token(request)
-    assert token == "a" * 24
+    assert token == valid_token
     assert should_set is False
 
 

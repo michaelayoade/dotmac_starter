@@ -203,8 +203,18 @@ def client(db_session):
     app.dependency_overrides[api_get_db] = override_get_db
     app.dependency_overrides[auth_deps_get_db] = override_get_db
 
-    with TestClient(app, raise_server_exceptions=False) as test_client:
-        yield test_client
+    # Mock Redis for rate limiter so auth endpoints don't return 503
+    mock_redis = MagicMock()
+    mock_pipe = MagicMock()
+    mock_pipe.execute.return_value = [None, 0, None, None]
+    mock_redis.pipeline.return_value = mock_pipe
+
+    with patch(
+        "app.middleware.rate_limit.RateLimitMiddleware._ensure_redis",
+        return_value=mock_redis,
+    ):
+        with TestClient(app, raise_server_exceptions=False) as test_client:
+            yield test_client
 
     app.dependency_overrides.clear()
 

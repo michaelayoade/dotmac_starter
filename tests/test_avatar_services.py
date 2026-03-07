@@ -38,7 +38,7 @@ class TestAvatarValidation:
             file = MagicMock(spec=UploadFile)
             file.content_type = "image/jpeg"
             # Should not raise
-            avatar_service.validate_avatar(file)
+            avatar_service.validate_avatar(file, "image/jpeg")
 
     def test_validate_avatar_invalid_type(self):
         """Test validation fails for disallowed content type."""
@@ -50,7 +50,7 @@ class TestAvatarValidation:
             file = MagicMock(spec=UploadFile)
             file.content_type = "application/pdf"
             with pytest.raises(HTTPException) as exc:
-                avatar_service.validate_avatar(file)
+                avatar_service.validate_avatar(file, "application/pdf")
             assert exc.value.status_code == 400
             assert "Invalid file type" in exc.value.detail
 
@@ -64,7 +64,7 @@ class TestAvatarValidation:
             file = MagicMock(spec=UploadFile)
             file.content_type = "image/svg+xml"
             with pytest.raises(HTTPException) as exc:
-                avatar_service.validate_avatar(file)
+                avatar_service.validate_avatar(file, "image/svg+xml")
             assert exc.value.status_code == 400
 
 
@@ -74,10 +74,11 @@ class TestAvatarSizeLimits:
     @pytest.mark.asyncio
     async def test_save_avatar_within_size_limit(self, tmp_path):
         """Test saving avatar that's within size limit."""
-        content = b"x" * 1000  # 1KB file
+        jpeg_header = b"\xff\xd8\xff\xe0" + b"x" * 508  # 512 bytes JPEG header
+        rest = b"x" * 488  # remaining content
         file = MagicMock(spec=UploadFile)
         file.content_type = "image/jpeg"
-        file.read = AsyncMock(return_value=content)
+        file.read = AsyncMock(side_effect=[jpeg_header, rest])
 
         with patch.object(avatar_service.settings, "avatar_allowed_types", "image/jpeg"):
             with patch.object(avatar_service.settings, "avatar_max_size_bytes", 1024 * 1024):
@@ -90,10 +91,11 @@ class TestAvatarSizeLimits:
     @pytest.mark.asyncio
     async def test_save_avatar_exceeds_size_limit(self, tmp_path):
         """Test saving avatar that exceeds size limit."""
-        content = b"x" * (3 * 1024 * 1024)  # 3MB file
+        jpeg_header = b"\xff\xd8\xff\xe0" + b"x" * 508  # 512 bytes JPEG header
+        rest = b"x" * (3 * 1024 * 1024)  # 3MB remaining
         file = MagicMock(spec=UploadFile)
         file.content_type = "image/jpeg"
-        file.read = AsyncMock(return_value=content)
+        file.read = AsyncMock(side_effect=[jpeg_header, rest])
 
         with patch.object(avatar_service.settings, "avatar_allowed_types", "image/jpeg"):
             with patch.object(avatar_service.settings, "avatar_max_size_bytes", 2 * 1024 * 1024):
@@ -107,10 +109,11 @@ class TestAvatarSizeLimits:
     async def test_save_avatar_creates_directory(self, tmp_path):
         """Test that save_avatar creates upload directory if it doesn't exist."""
         upload_dir = tmp_path / "avatars" / "nested"
-        content = b"x" * 100
+        png_header = b"\x89PNG\r\n\x1a\n" + b"x" * 504  # 512 bytes PNG header
+        rest = b""
         file = MagicMock(spec=UploadFile)
         file.content_type = "image/png"
-        file.read = AsyncMock(return_value=content)
+        file.read = AsyncMock(side_effect=[png_header, rest])
 
         with patch.object(avatar_service.settings, "avatar_allowed_types", "image/png"):
             with patch.object(avatar_service.settings, "avatar_max_size_bytes", 1024 * 1024):

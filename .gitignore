@@ -70,7 +70,7 @@ static/avatars/*
 Thumbs.db
 
 # Poetry
-poetry.lock
+# poetry.lock is tracked — required by Dockerfile and CI cache keys
 
 # Docker
 .docker/
