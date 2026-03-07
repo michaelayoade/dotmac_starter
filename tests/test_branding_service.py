@@ -62,7 +62,9 @@ def test_sanitize_branding_css_strips_dangerous_patterns() -> None:
     sanitized = sanitize_branding_css(css)
 
     assert ".ok { color: red; }" in sanitized
-    assert '.cdn { background-image: url("https://cdn.example.com/bg.png"); }' in sanitized
+    assert (
+        '.cdn { background-image: url("https://cdn.example.com/bg.png"); }' in sanitized
+    )
     assert '.relative { background-image: url("/img/bg.png"); }' in sanitized
     assert "@import" not in sanitized
     assert "javascript:" not in sanitized.lower()

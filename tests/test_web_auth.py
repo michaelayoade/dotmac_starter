@@ -1,5 +1,4 @@
 """Tests for web authentication routes."""
-import pytest
 
 
 class TestWebAuth:

@@ -1,4 +1,5 @@
 """Tests for RateLimitMiddleware."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -65,7 +66,9 @@ class TestRateLimitMiddleware:
         assert resp.status_code == 503
 
     @patch("app.middleware.rate_limit._get_redis", return_value=None)
-    def test_allows_non_auth_when_redis_unavailable(self, mock_redis: MagicMock) -> None:
+    def test_allows_non_auth_when_redis_unavailable(
+        self, mock_redis: MagicMock
+    ) -> None:
         """Fail-open: non-auth paths are allowed when Redis is unavailable."""
         fresh_app = FastAPI()
         fresh_app.add_middleware(RateLimitMiddleware)
@@ -101,7 +104,6 @@ class TestRateLimitMiddleware:
 
     def test_429_response_format(self) -> None:
         """429 responses have standard error format."""
-        from app.middleware.rate_limit import RateLimitMiddleware
         from starlette.responses import JSONResponse
 
         # Verify the response structure matches our error envelope
@@ -117,6 +119,7 @@ class TestRateLimitMiddleware:
 class TestRateLimitPaths:
     def test_login_path_configured(self) -> None:
         from app.middleware.rate_limit import _RATE_LIMIT_PATHS
+
         assert "/auth/login" in _RATE_LIMIT_PATHS
         max_req, window = _RATE_LIMIT_PATHS["/auth/login"]
         assert max_req == 10
@@ -124,6 +127,7 @@ class TestRateLimitPaths:
 
     def test_password_reset_path_configured(self) -> None:
         from app.middleware.rate_limit import _RATE_LIMIT_PATHS
+
         assert "/auth/password-reset" in _RATE_LIMIT_PATHS
         max_req, window = _RATE_LIMIT_PATHS["/auth/password-reset"]
         assert max_req == 5
@@ -131,8 +135,10 @@ class TestRateLimitPaths:
 
     def test_mfa_verify_path_configured(self) -> None:
         from app.middleware.rate_limit import _RATE_LIMIT_PATHS
+
         assert "/auth/mfa/verify" in _RATE_LIMIT_PATHS
 
     def test_register_path_configured(self) -> None:
         from app.middleware.rate_limit import _RATE_LIMIT_PATHS
+
         assert "/auth/register" in _RATE_LIMIT_PATHS
