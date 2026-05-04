@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -14,6 +14,7 @@ from app.api.deps import get_db
 from app.models.audit import AuditActorType, AuditEvent
 from app.services.audit import audit_events
 from app.services.branding_context import load_branding_context
+from app.services.exceptions import NotFoundError
 from app.templates import templates
 from app.web.deps import require_web_auth
 
@@ -110,7 +111,10 @@ def audit_event_detail(
     auth: dict = Depends(require_web_auth),
 ) -> HTMLResponse:
     """Show audit event detail view."""
-    event = audit_events.get(db, str(event_id))
+    try:
+        event = audit_events.get(db, str(event_id))
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     ctx = _base_context(
         request, db, auth, title="Audit Event Detail", page_title="Audit Event Detail"
     )

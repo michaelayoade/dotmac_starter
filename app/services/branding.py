@@ -4,6 +4,7 @@ import colorsys
 import re
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -91,12 +92,12 @@ def _default_branding() -> dict[str, Any]:
 
 def get_branding(db: Session) -> dict[str, Any]:
     defaults = _default_branding()
-    setting = (
-        db.query(DomainSetting)
-        .filter(DomainSetting.domain == SettingDomain.scheduler)
-        .filter(DomainSetting.key == _SETTING_KEY)
-        .first()
-    )
+    setting = db.scalars(
+        select(DomainSetting)
+        .where(DomainSetting.domain == SettingDomain.scheduler)
+        .where(DomainSetting.key == _SETTING_KEY)
+        .limit(1)
+    ).first()
     if not setting or not isinstance(setting.value_json, dict):
         return defaults
     data = setting.value_json
@@ -114,12 +115,12 @@ def save_branding(db: Session, payload: dict[str, Any]) -> dict[str, Any]:
     current["accent_color"] = _normalize_hex(current.get("accent_color"), "#F97316")
     current["custom_css"] = sanitize_branding_css(current.get("custom_css"))
 
-    setting = (
-        db.query(DomainSetting)
-        .filter(DomainSetting.domain == SettingDomain.scheduler)
-        .filter(DomainSetting.key == _SETTING_KEY)
-        .first()
-    )
+    setting = db.scalars(
+        select(DomainSetting)
+        .where(DomainSetting.domain == SettingDomain.scheduler)
+        .where(DomainSetting.key == _SETTING_KEY)
+        .limit(1)
+    ).first()
     if not setting:
         setting = DomainSetting(
             domain=SettingDomain.scheduler,
@@ -136,7 +137,7 @@ def save_branding(db: Session, payload: dict[str, Any]) -> dict[str, Any]:
         setting.value_json = current
         setting.is_active = True
 
-    db.commit()
+    db.flush()
     return current
 
 

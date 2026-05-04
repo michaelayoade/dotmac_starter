@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -14,6 +14,7 @@ from app.api.deps import get_db
 from app.models.scheduler import ScheduledTask
 from app.schemas.scheduler import ScheduledTaskCreate, ScheduledTaskUpdate
 from app.services.branding_context import load_branding_context
+from app.services.exceptions import NotFoundError
 from app.services.scheduler import scheduled_tasks
 from app.templates import templates
 from app.web.deps import require_web_auth
@@ -118,6 +119,7 @@ async def create_task_submit(
             enabled=data.get("enabled") == "on",
         )
         scheduled_tasks.create(db, payload)
+        db.commit()
         logger.info("Created scheduled task via web: %s", payload.name)
         return RedirectResponse(
             url="/admin/scheduler?success=Task+created+successfully",
@@ -157,7 +159,10 @@ def edit_task_form(
     auth: dict = Depends(require_web_auth),
 ) -> HTMLResponse:
     """Render the edit scheduled task form."""
-    task = scheduled_tasks.get(db, str(task_id))
+    try:
+        task = scheduled_tasks.get(db, str(task_id))
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     ctx = _base_context(
         request,
         db,
@@ -191,6 +196,7 @@ async def edit_task_submit(
             enabled="enabled" in data,
         )
         scheduled_tasks.update(db, str(task_id), payload)
+        db.commit()
         logger.info("Updated scheduled task via web: %s", task_id)
         return RedirectResponse(
             url="/admin/scheduler?success=Task+updated+successfully",
@@ -224,6 +230,7 @@ async def delete_task(
 
     try:
         scheduled_tasks.delete(db, str(task_id))
+        db.commit()
         logger.info("Deleted scheduled task via web: %s", task_id)
         return RedirectResponse(
             url="/admin/scheduler?success=Task+deleted+successfully",

@@ -163,7 +163,9 @@ async def audit_middleware(
                 audit_service.audit_events.log_request(
                     db, request, Response(status_code=500)
                 )
+                db.commit()
             except Exception:
+                db.rollback()
                 logger.exception(
                     "Failed to log audit event for %s %s",
                     request.method,
@@ -176,7 +178,9 @@ async def audit_middleware(
         db = SessionLocal()
         try:
             audit_service.audit_events.log_request(db, request, response)
+            db.commit()
         except Exception:
+            db.rollback()
             logger.exception(
                 "Failed to log audit event for %s %s",
                 request.method,

@@ -1,9 +1,11 @@
-from fastapi import HTTPException, Request, Response
+from fastapi import Request, Response
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.audit import AuditActorType, AuditEvent
 from app.schemas.audit import AuditEventCreate
 from app.services.common import coerce_uuid
+from app.services.exceptions import BadRequestError, NotFoundError
 from app.services.query_utils import apply_ordering, apply_pagination
 from app.services.response import ListResponseMixin
 
@@ -17,10 +19,7 @@ class AuditEvents(ListResponseMixin):
             return AuditActorType(value)
         except ValueError as exc:
             allowed = ", ".join(sorted(a.value for a in AuditActorType))
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid actor_type. Allowed: {allowed}",
-            ) from exc
+            raise BadRequestError(f"Invalid actor_type. Allowed: {allowed}") from exc
 
     @staticmethod
     def create(db: Session, payload: AuditEventCreate):
@@ -29,7 +28,7 @@ class AuditEvents(ListResponseMixin):
             data.pop("occurred_at", None)
         event = AuditEvent(**data)
         db.add(event)
-        db.commit()
+        db.flush()
         db.refresh(event)
         return event
 
@@ -37,7 +36,7 @@ class AuditEvents(ListResponseMixin):
     def get(db: Session, event_id: str):
         event = db.get(AuditEvent, coerce_uuid(event_id))
         if not event:
-            raise HTTPException(status_code=404, detail="Audit event not found")
+            raise NotFoundError("Audit event not found")
         return event
 
     @staticmethod
@@ -56,25 +55,25 @@ class AuditEvents(ListResponseMixin):
         limit: int,
         offset: int,
     ):
-        query = db.query(AuditEvent)
+        query = select(AuditEvent)
         if actor_id:
-            query = query.filter(AuditEvent.actor_id == actor_id)
+            query = query.where(AuditEvent.actor_id == actor_id)
         if actor_type:
-            query = query.filter(AuditEvent.actor_type == actor_type)
+            query = query.where(AuditEvent.actor_type == actor_type)
         if action:
-            query = query.filter(AuditEvent.action == action)
+            query = query.where(AuditEvent.action == action)
         if entity_type:
-            query = query.filter(AuditEvent.entity_type == entity_type)
+            query = query.where(AuditEvent.entity_type == entity_type)
         if request_id:
-            query = query.filter(AuditEvent.request_id == request_id)
+            query = query.where(AuditEvent.request_id == request_id)
         if is_success is not None:
-            query = query.filter(AuditEvent.is_success == is_success)
+            query = query.where(AuditEvent.is_success == is_success)
         if status_code is not None:
-            query = query.filter(AuditEvent.status_code == status_code)
+            query = query.where(AuditEvent.status_code == status_code)
         if is_active is None:
-            query = query.filter(AuditEvent.is_active.is_(True))
+            query = query.where(AuditEvent.is_active.is_(True))
         else:
-            query = query.filter(AuditEvent.is_active == is_active)
+            query = query.where(AuditEvent.is_active == is_active)
         query = apply_ordering(
             query,
             order_by,
@@ -86,7 +85,7 @@ class AuditEvents(ListResponseMixin):
                 "status_code": AuditEvent.status_code,
             },
         )
-        return apply_pagination(query, limit, offset).all()
+        return db.scalars(apply_pagination(query, limit, offset)).all()
 
     @staticmethod
     def log_request(db: Session, request: Request, response: Response):
@@ -122,15 +121,15 @@ class AuditEvents(ListResponseMixin):
         )
         event = AuditEvent(**payload.model_dump())
         db.add(event)
-        db.commit()
+        db.flush()
 
     @staticmethod
     def delete(db: Session, event_id: str):
         event = db.get(AuditEvent, coerce_uuid(event_id))
         if not event:
-            raise HTTPException(status_code=404, detail="Audit event not found")
+            raise NotFoundError("Audit event not found")
         event.is_active = False
-        db.commit()
+        db.flush()
 
 
 audit_events = AuditEvents()
