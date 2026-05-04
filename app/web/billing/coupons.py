@@ -135,6 +135,7 @@ async def create_coupon_submit(
             redeem_by=redeem_by_val,
         )
         billing_service.coupons.create(db, payload)
+        db.commit()
         logger.info("Created coupon via web: %s", payload.code)
         return RedirectResponse(
             url="/admin/billing/coupons?success=Coupon+created+successfully",
@@ -217,6 +218,7 @@ async def edit_coupon_submit(
             redeem_by=redeem_by_val,
         )
         billing_service.coupons.update(db, str(item_id), payload)
+        db.commit()
         logger.info("Updated coupon via web: %s", item_id)
         return RedirectResponse(
             url=f"/admin/billing/coupons/{item_id}?success=Coupon+updated+successfully",
@@ -247,6 +249,7 @@ async def delete_coupon(
 
     try:
         billing_service.coupons.delete(db, str(item_id))
+        db.commit()
         logger.info("Deleted coupon via web: %s", item_id)
         return RedirectResponse(
             url="/admin/billing/coupons?success=Coupon+deleted+successfully",

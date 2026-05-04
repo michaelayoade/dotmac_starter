@@ -17,15 +17,15 @@
     {% include "partials/_org_branding_head.html" %}
 
     <!-- Tailwind CSS (built from tailwind.config.js) -->
-    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="{{ static_asset_url('/static/css/styles.css') }}">
 
     <!-- HTMX -->
-    <script src="/static/js/htmx.min.js"></script>
-    <script src="/static/js/htmx-loading-states.js"></script>
+    <script src="{{ static_asset_url('/static/js/htmx.min.js') }}"></script>
+    <script src="{{ static_asset_url('/static/js/htmx-loading-states.js') }}"></script>
 
     <!-- Alpine.js CSP build 3.15.8 + components -->
-    <script src="/static/js/components.js"></script>
-    <script defer src="/static/js/alpine.min.js"></script>
+    <script src="{{ static_asset_url('/static/js/components.js') }}"></script>
+    <script defer src="{{ static_asset_url('/static/js/alpine.min.js') }}"></script>
 
     <!-- Custom Styles -->
     <style>
@@ -200,7 +200,7 @@
     {% endblock %}
 
     <!-- CSRF Auto-Injection: injects token into all POST forms, HTMX requests, and fetch() calls -->
-    <script>
+    <script nonce="{{ request.state.csp_nonce }}">
         (function() {
             const meta = document.querySelector('meta[name="csrf-token"]');
             const token = meta ? meta.getAttribute('content') : '';
@@ -282,7 +282,7 @@
     </div>
 
     <!-- Global Scripts -->
-    <script>
+    <script nonce="{{ request.state.csp_nonce }}">
         // Global helper: window.showToast('message', 'success')
         window.showToast = function(message, type, duration) {
             window.dispatchEvent(new CustomEvent('show-toast', {
@@ -460,7 +460,7 @@
     </script>
 
     {% block scripts %}{% endblock %}
-    <script defer src="/static/js/typeahead.js"></script>
-    <script defer src="/static/js/avatar.js"></script>
+    <script defer src="{{ static_asset_url('/static/js/typeahead.js') }}"></script>
+    <script defer src="{{ static_asset_url('/static/js/avatar.js') }}"></script>
 </body>
 </html>

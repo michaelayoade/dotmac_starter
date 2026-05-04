@@ -53,7 +53,7 @@ class TestRateLimitMiddleware:
 
     @patch("app.middleware.rate_limit._get_redis", return_value=None)
     def test_allows_when_redis_unavailable(self, mock_redis: MagicMock) -> None:
-        """Fail-open: if Redis is unavailable, requests are allowed."""
+        """Auth paths fail closed if Redis is unavailable."""
         # Create a fresh app so the middleware hasn't cached Redis yet
         fresh_app = FastAPI()
         fresh_app.add_middleware(RateLimitMiddleware)
@@ -64,7 +64,7 @@ class TestRateLimitMiddleware:
 
         with TestClient(fresh_app) as c:
             resp = c.post("/auth/login")
-        assert resp.status_code == 200
+        assert resp.status_code == 503
 
     @patch("app.middleware.rate_limit._get_redis")
     def test_rate_limit_headers_present(self, mock_redis: MagicMock) -> None:
@@ -89,7 +89,6 @@ class TestRateLimitMiddleware:
 
     def test_429_response_format(self) -> None:
         """429 responses have standard error format."""
-        from app.middleware.rate_limit import RateLimitMiddleware
         from starlette.responses import JSONResponse
 
         # Verify the response structure matches our error envelope

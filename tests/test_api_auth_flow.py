@@ -1,18 +1,45 @@
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from app.models.auth import (
-    MFAMethod,
-    MFAMethodType,
     Session as AuthSession,
+)
+from app.models.auth import (
     SessionStatus,
     UserCredential,
 )
 from app.models.person import Person
 from app.services import auth_flow as auth_flow_service
 from app.services.auth_flow import hash_password
+
+
+class _FakeRateLimitRedis:
+    def pipeline(self):
+        return self
+
+    def zremrangebyscore(self, *args, **kwargs):
+        return self
+
+    def zcard(self, *args, **kwargs):
+        return self
+
+    def zadd(self, *args, **kwargs):
+        return self
+
+    def expire(self, *args, **kwargs):
+        return self
+
+    def execute(self):
+        return [None, 0, None, None]
+
+
+@pytest.fixture(autouse=True)
+def _rate_limit_redis(monkeypatch):
+    monkeypatch.setattr(
+        "app.middleware.rate_limit._get_redis", lambda: _FakeRateLimitRedis()
+    )
 
 
 class TestLoginAPI:
@@ -156,7 +183,7 @@ class TestSessionsAPI:
             status=SessionStatus.active,
             ip_address="192.168.1.1",
             user_agent="other-client",
-            expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+            expires_at=datetime.now(UTC) + timedelta(days=30),
         )
         db_session.add(other_session)
         db_session.commit()
@@ -185,7 +212,7 @@ class TestSessionsAPI:
                 status=SessionStatus.active,
                 ip_address=f"192.168.1.{i}",
                 user_agent=f"client-{i}",
-                expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+                expires_at=datetime.now(UTC) + timedelta(days=30),
             )
             db_session.add(session)
         db_session.commit()
@@ -279,7 +306,7 @@ class TestPasswordAPI:
             status=SessionStatus.active,
             ip_address="192.168.1.100",
             user_agent="other-client",
-            expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+            expires_at=datetime.now(UTC) + timedelta(days=30),
         )
         db_session.add(other_session)
         db_session.commit()
@@ -332,7 +359,7 @@ class TestPasswordAPI:
             status=SessionStatus.active,
             ip_address="192.168.1.200",
             user_agent="client-one",
-            expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+            expires_at=datetime.now(UTC) + timedelta(days=30),
         )
         session_two = AuthSession(
             person_id=person.id,
@@ -340,7 +367,7 @@ class TestPasswordAPI:
             status=SessionStatus.active,
             ip_address="192.168.1.201",
             user_agent="client-two",
-            expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+            expires_at=datetime.now(UTC) + timedelta(days=30),
         )
         db_session.add_all([session_one, session_two])
         db_session.commit()
@@ -429,7 +456,9 @@ class TestRefreshAPI:
         old_refresh = client.cookies.get(cookie_name)
         assert old_refresh
 
-        refresh_response = client.post("/auth/refresh", json={})
+        refresh_response = client.post(
+            "/auth/refresh", json={"refresh_token": old_refresh}
+        )
         assert refresh_response.status_code == 200
         new_refresh = client.cookies.get(cookie_name)
         assert new_refresh

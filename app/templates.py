@@ -9,6 +9,9 @@ from __future__ import annotations
 import html
 import re
 from datetime import UTC, date, datetime
+from functools import lru_cache
+from hashlib import sha256
+from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
 
@@ -102,6 +105,24 @@ def _timeago(value: datetime | None) -> str:
     return f"{years}y ago"
 
 
+@lru_cache(maxsize=256)
+def _asset_version(path: str) -> str:
+    normalized = path.split("?", 1)[0].lstrip("/")
+    if not normalized.startswith("static/"):
+        return "missing"
+    file_path = Path(normalized)
+    try:
+        return sha256(file_path.read_bytes()).hexdigest()[:12]
+    except OSError:
+        return "missing"
+
+
+def _static_asset_url(path: str) -> str:
+    normalized = "/" + path.lstrip("/")
+    separator = "&" if "?" in normalized else "?"
+    return f"{normalized}{separator}v={_asset_version(normalized)}"
+
+
 # ── Register filters ─────────────────────────────────────
 
 templates.env.filters["sanitize_html"] = _sanitize_html
@@ -111,3 +132,4 @@ templates.env.filters["format_datetime"] = _format_datetime
 templates.env.filters["format_currency"] = _format_currency
 templates.env.filters["format_number"] = _format_number
 templates.env.filters["timeago"] = _timeago
+templates.env.globals["static_asset_url"] = _static_asset_url

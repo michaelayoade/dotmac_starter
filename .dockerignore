@@ -45,6 +45,10 @@ LICENSE
 node_modules
 package-lock.json
 
+# Tests and local artifacts
+tests
+tmpci.db
+
 # Misc
 *.log
 *.tmp

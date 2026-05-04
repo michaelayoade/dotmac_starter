@@ -15,7 +15,7 @@ bind = os.getenv("GUNICORN_BIND", "0.0.0.0:8001")
 # Rule of thumb: 2-4 workers per CPU core for I/O-bound apps
 workers = int(os.getenv("GUNICORN_WORKERS", str(multiprocessing.cpu_count() * 2 + 1)))
 worker_class = "uvicorn.workers.UvicornWorker"
-worker_tmp_dir = "/dev/shm"  # RAM-backed tmpdir for heartbeat (prevents disk I/O issues)
+worker_tmp_dir = "/dev/shm"  # noqa: S108 - RAM-backed heartbeat dir in containers
 
 # ── Timeouts ─────────────────────────────────────────────
 timeout = int(os.getenv("GUNICORN_TIMEOUT", "120"))
@@ -40,3 +40,10 @@ access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s"
 
 # ── Process naming ───────────────────────────────────────
 proc_name = "starter_template"
+
+# ── Proxy headers ────────────────────────────────────────
+# Uvicorn reads FORWARDED_ALLOW_IPS to decide which proxies may set
+# X-Forwarded-* values used by request.url.scheme and HSTS checks.
+raw_env = [
+    f"FORWARDED_ALLOW_IPS={os.getenv('FORWARDED_ALLOW_IPS', '127.0.0.1')}",
+]

@@ -1,8 +1,7 @@
 import uuid
 
-import pytest
-
 from app.models.audit import AuditActorType, AuditEvent
+from tests.conftest import _create_access_token
 
 
 class TestAuditEventsAPI:
@@ -28,10 +27,16 @@ class TestAuditEventsAPI:
         assert response.status_code == 401
 
     def test_get_audit_event_insufficient_scope(
-        self, client, auth_headers, audit_event
+        self, client, auth_session, audit_event
     ):
         """Test getting an audit event without audit scope."""
-        response = client.get(f"/audit-events/{audit_event.id}", headers=auth_headers)
+        token = _create_access_token(
+            str(auth_session.person_id), str(auth_session.id), roles=["viewer"]
+        )
+        response = client.get(
+            f"/audit-events/{audit_event.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
         assert response.status_code == 403
 
     def test_list_audit_events(self, client, admin_headers, audit_event):

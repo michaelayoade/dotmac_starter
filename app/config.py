@@ -10,6 +10,12 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
+class ConfigWarning:
+    message: str
+    critical: bool = False
+
+
+@dataclass(frozen=True)
 class Settings:
     database_url: str = os.getenv(
         "DATABASE_URL",
@@ -21,6 +27,7 @@ class Settings:
     db_max_overflow: int = int(os.getenv("DB_MAX_OVERFLOW", "10"))
     db_pool_timeout: int = int(os.getenv("DB_POOL_TIMEOUT", "30"))
     db_pool_recycle: int = int(os.getenv("DB_POOL_RECYCLE", "1800"))
+    db_statement_timeout_ms: int = int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "30000"))
 
     # Avatar settings
     avatar_upload_dir: str = os.getenv("AVATAR_UPLOAD_DIR", "static/avatars")
@@ -71,31 +78,58 @@ class Settings:
     # Metrics
     metrics_token: str | None = os.getenv("METRICS_TOKEN") or None
 
+    # Static assets
+    static_cache_control: str = os.getenv(
+        "STATIC_CACHE_CONTROL", "public, max-age=300, must-revalidate"
+    )
 
-def validate_settings(s: Settings) -> list[str]:
-    """Validate required settings at startup. Returns list of warnings."""
-    warnings: list[str] = []
+
+def validate_settings(s: Settings) -> list[ConfigWarning]:
+    """Validate required settings at startup."""
+    warnings: list[ConfigWarning] = []
+    environment = os.getenv("ENVIRONMENT", "dev").lower()
+    production = environment in {"prod", "production"}
     jwt_secret = os.getenv("JWT_SECRET", "")
     totp_key = os.getenv("TOTP_ENCRYPTION_KEY", "")
 
     if not jwt_secret:
-        warnings.append("JWT_SECRET is not set — authentication will not work")
+        warnings.append(
+            ConfigWarning(
+                "JWT_SECRET is not set - authentication will not work",
+                critical=production,
+            )
+        )
     elif len(jwt_secret) < 32 and not jwt_secret.startswith("openbao://"):
         warnings.append(
-            "JWT_SECRET is shorter than 32 characters — consider a stronger secret"
+            ConfigWarning(
+                "JWT_SECRET is shorter than 32 characters - consider a stronger secret",
+                critical=production,
+            )
         )
 
     if not totp_key:
-        warnings.append("TOTP_ENCRYPTION_KEY is not set — MFA will not work")
+        warnings.append(
+            ConfigWarning(
+                "TOTP_ENCRYPTION_KEY is not set - MFA will not work",
+                critical=production,
+            )
+        )
 
     if not s.secret_key:
-        warnings.append("SECRET_KEY is not set — CSRF and session security weakened")
+        warnings.append(
+            ConfigWarning(
+                "SECRET_KEY is not set - CSRF and session security weakened",
+                critical=production,
+            )
+        )
 
     if (
         "localhost" in s.database_url
         and os.getenv("ENVIRONMENT", "dev") == "production"
     ):
-        warnings.append("DATABASE_URL points to localhost in production")
+        warnings.append(
+            ConfigWarning("DATABASE_URL points to localhost in production", critical=True)
+        )
 
     return warnings
 

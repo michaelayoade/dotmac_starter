@@ -140,10 +140,37 @@ jobs:
           key: venv-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('poetry.lock') }}
 
       - name: Install dependencies
-        run: poetry install --only dev --no-interaction
+        run: poetry install --no-interaction
 
       - name: Security lint (bandit via ruff)
         run: poetry run ruff check app/ --select S
+
+      - name: Install dependency scanner
+        run: poetry run pip install pip-audit
+
+      - name: Dependency CVE scan
+        run: poetry run pip-audit
+
+      - name: Filesystem vulnerability scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.spdx.json
 
   pre-commit:
     name: Pre-commit
@@ -176,6 +203,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Scan Docker image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: starter-template:ci
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+
       - name: Create CI network
         run: docker network create ci-net
 
@@ -193,6 +227,10 @@ jobs:
       - name: Start Redis
         run: |
           docker run -d --name ci-redis --network ci-net \
+            -e REDIS_PASSWORD=redis \
+            --health-cmd "redis-cli -a redis ping | grep PONG" \
+            --health-interval 5s \
+            --health-retries 10 \
             redis:7 redis-server --requirepass redis
 
       - name: Wait for PostgreSQL
@@ -203,6 +241,17 @@ jobs:
               break
             fi
             echo "Waiting for PostgreSQL... ($i/30)"
+            sleep 2
+          done
+
+      - name: Wait for Redis
+        run: |
+          for i in $(seq 1 30); do
+            if docker exec ci-redis redis-cli -a redis ping | grep -q PONG; then
+              echo "Redis ready"
+              break
+            fi
+            echo "Waiting for Redis... ($i/30)"
             sleep 2
           done
 

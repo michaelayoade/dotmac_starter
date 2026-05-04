@@ -115,6 +115,7 @@ async def create_product_submit(
             is_active=data.get("is_active") == "on",
         )
         billing_service.products.create(db, payload)
+        db.commit()
         logger.info("Created product via web: %s", payload.name)
         return RedirectResponse(
             url="/admin/billing/products?success=Product+created+successfully",
@@ -194,6 +195,7 @@ async def edit_product_submit(
             is_active="is_active" in data,
         )
         billing_service.products.update(db, str(item_id), payload)
+        db.commit()
         logger.info("Updated product via web: %s", item_id)
         return RedirectResponse(
             url=f"/admin/billing/products/{item_id}?success=Product+updated+successfully",
@@ -223,6 +225,7 @@ async def delete_product(
 
     try:
         billing_service.products.delete(db, str(item_id))
+        db.commit()
         logger.info("Deleted product via web: %s", item_id)
         return RedirectResponse(
             url="/admin/billing/products?success=Product+deleted+successfully",

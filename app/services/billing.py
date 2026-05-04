@@ -1,6 +1,7 @@
 import logging
+from typing import Any
 
-from fastapi import HTTPException
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
 from app.models.billing import (
@@ -54,10 +55,53 @@ from app.schemas.billing import (
     WebhookEventUpdate,
 )
 from app.services.common import coerce_uuid
+from app.services.exceptions import NotFoundError
 from app.services.query_utils import apply_ordering, apply_pagination, validate_enum
 from app.services.response import ListResponseMixin
 
 logger = logging.getLogger(__name__)
+
+
+def _require(item: Any | None, message: str) -> Any:
+    if not item:
+        raise NotFoundError(message)
+    return item
+
+
+def _get(db: Session, model: type, item_id: str, message: str) -> Any:
+    return _require(db.get(model, coerce_uuid(item_id)), message)
+
+
+def _require_exists(db: Session, model: type, item_id: str, message: str) -> None:
+    _get(db, model, str(item_id), message)
+
+
+def _persist(db: Session, item: Any) -> Any:
+    db.add(item)
+    db.flush()
+    db.refresh(item)
+    return item
+
+
+def _flush(db: Session, item: Any) -> Any:
+    db.flush()
+    db.refresh(item)
+    return item
+
+
+def _list(
+    db: Session,
+    query: Select,
+    order_by: str,
+    order_dir: str,
+    allowed_columns: dict[str, Any],
+    limit: int,
+    offset: int,
+) -> tuple[list[Any], int]:
+    total = db.scalar(select(func.count()).select_from(query.order_by(None).subquery()))
+    ordered = apply_ordering(query, order_by, order_dir, allowed_columns)
+    items = list(db.scalars(apply_pagination(ordered, limit, offset)).all())
+    return items, total or 0
 
 
 # ── Products ─────────────────────────────────────────────
@@ -67,18 +111,13 @@ class Products(ListResponseMixin):
     @staticmethod
     def create(db: Session, payload: ProductCreate) -> Product:
         item = Product(**payload.model_dump())
-        db.add(item)
-        db.commit()
-        db.refresh(item)
+        _persist(db, item)
         logger.info("Created Product: %s", item.id)
         return item
 
     @staticmethod
     def get(db: Session, item_id: str) -> Product:
-        item = db.get(Product, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Product not found")
-        return item
+        return _get(db, Product, item_id, "Product not found")
 
     @staticmethod
     def list(
@@ -89,39 +128,33 @@ class Products(ListResponseMixin):
         limit: int,
         offset: int,
     ) -> tuple[list[Product], int]:
-        query = db.query(Product)
+        query = select(Product)
         if is_active is not None:
-            query = query.filter(Product.is_active == is_active)
-        total = query.count()
-        query = apply_ordering(
+            query = query.where(Product.is_active == is_active)
+        return _list(
+            db,
             query,
             order_by,
             order_dir,
             {"created_at": Product.created_at, "name": Product.name},
+            limit,
+            offset,
         )
-        items = list(apply_pagination(query, limit, offset).all())
-        return items, total
 
     @staticmethod
     def update(db: Session, item_id: str, payload: ProductUpdate) -> Product:
-        item = db.get(Product, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Product not found")
+        item = _get(db, Product, item_id, "Product not found")
         for key, value in payload.model_dump(exclude_unset=True).items():
             setattr(item, key, value)
-        db.commit()
-        db.refresh(item)
+        _flush(db, item)
         logger.info("Updated %s: %s", Product.__name__, item.id)
         return item
 
     @staticmethod
     def delete(db: Session, item_id: str) -> None:
-        item = db.get(Product, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Product not found")
+        item = _get(db, Product, item_id, "Product not found")
         item.is_active = False
-        db.commit()
-        db.refresh(item)
+        _flush(db, item)
         logger.info("Soft-deleted %s: %s", Product.__name__, item.id)
 
 
@@ -131,21 +164,15 @@ class Products(ListResponseMixin):
 class Prices(ListResponseMixin):
     @staticmethod
     def create(db: Session, payload: PriceCreate) -> Price:
-        if not db.get(Product, coerce_uuid(payload.product_id)):
-            raise HTTPException(status_code=404, detail="Product not found")
+        _require_exists(db, Product, str(payload.product_id), "Product not found")
         item = Price(**payload.model_dump())
-        db.add(item)
-        db.commit()
-        db.refresh(item)
+        _persist(db, item)
         logger.info("Created Price: %s", item.id)
         return item
 
     @staticmethod
     def get(db: Session, item_id: str) -> Price:
-        item = db.get(Price, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Price not found")
-        return item
+        return _get(db, Price, item_id, "Price not found")
 
     @staticmethod
     def list(
@@ -159,45 +186,39 @@ class Prices(ListResponseMixin):
         limit: int,
         offset: int,
     ) -> tuple[list[Price], int]:
-        query = db.query(Price)
+        query = select(Price)
         if product_id:
-            query = query.filter(Price.product_id == coerce_uuid(product_id))
+            query = query.where(Price.product_id == coerce_uuid(product_id))
         if type:
-            query = query.filter(Price.type == validate_enum(type, PriceType, "type"))
+            query = query.where(Price.type == validate_enum(type, PriceType, "type"))
         if currency:
-            query = query.filter(Price.currency == currency)
+            query = query.where(Price.currency == currency)
         if is_active is not None:
-            query = query.filter(Price.is_active == is_active)
-        total = query.count()
-        query = apply_ordering(
+            query = query.where(Price.is_active == is_active)
+        return _list(
+            db,
             query,
             order_by,
             order_dir,
             {"created_at": Price.created_at, "unit_amount": Price.unit_amount},
+            limit,
+            offset,
         )
-        items = list(apply_pagination(query, limit, offset).all())
-        return items, total
 
     @staticmethod
     def update(db: Session, item_id: str, payload: PriceUpdate) -> Price:
-        item = db.get(Price, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Price not found")
+        item = _get(db, Price, item_id, "Price not found")
         for key, value in payload.model_dump(exclude_unset=True).items():
             setattr(item, key, value)
-        db.commit()
-        db.refresh(item)
+        _flush(db, item)
         logger.info("Updated %s: %s", Price.__name__, item.id)
         return item
 
     @staticmethod
     def delete(db: Session, item_id: str) -> None:
-        item = db.get(Price, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Price not found")
+        item = _get(db, Price, item_id, "Price not found")
         item.is_active = False
-        db.commit()
-        db.refresh(item)
+        _flush(db, item)
         logger.info("Soft-deleted %s: %s", Price.__name__, item.id)
 
 
@@ -208,18 +229,13 @@ class Customers(ListResponseMixin):
     @staticmethod
     def create(db: Session, payload: CustomerCreate) -> Customer:
         item = Customer(**payload.model_dump())
-        db.add(item)
-        db.commit()
-        db.refresh(item)
+        _persist(db, item)
         logger.info("Created Customer: %s", item.id)
         return item
 
     @staticmethod
     def get(db: Session, item_id: str) -> Customer:
-        item = db.get(Customer, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Customer not found")
-        return item
+        return _get(db, Customer, item_id, "Customer not found")
 
     @staticmethod
     def list(
@@ -232,43 +248,37 @@ class Customers(ListResponseMixin):
         limit: int,
         offset: int,
     ) -> tuple[list[Customer], int]:
-        query = db.query(Customer)
+        query = select(Customer)
         if person_id:
-            query = query.filter(Customer.person_id == coerce_uuid(person_id))
+            query = query.where(Customer.person_id == coerce_uuid(person_id))
         if email:
-            query = query.filter(Customer.email.ilike(f"%{email}%"))
+            query = query.where(Customer.email.ilike(f"%{email}%"))
         if is_active is not None:
-            query = query.filter(Customer.is_active == is_active)
-        total = query.count()
-        query = apply_ordering(
+            query = query.where(Customer.is_active == is_active)
+        return _list(
+            db,
             query,
             order_by,
             order_dir,
             {"created_at": Customer.created_at, "name": Customer.name},
+            limit,
+            offset,
         )
-        items = list(apply_pagination(query, limit, offset).all())
-        return items, total
 
     @staticmethod
     def update(db: Session, item_id: str, payload: CustomerUpdate) -> Customer:
-        item = db.get(Customer, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Customer not found")
+        item = _get(db, Customer, item_id, "Customer not found")
         for key, value in payload.model_dump(exclude_unset=True).items():
             setattr(item, key, value)
-        db.commit()
-        db.refresh(item)
+        _flush(db, item)
         logger.info("Updated %s: %s", Customer.__name__, item.id)
         return item
 
     @staticmethod
     def delete(db: Session, item_id: str) -> None:
-        item = db.get(Customer, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Customer not found")
+        item = _get(db, Customer, item_id, "Customer not found")
         item.is_active = False
-        db.commit()
-        db.refresh(item)
+        _flush(db, item)
         logger.info("Soft-deleted %s: %s", Customer.__name__, item.id)
 
 
@@ -278,21 +288,15 @@ class Customers(ListResponseMixin):
 class Subscriptions(ListResponseMixin):
     @staticmethod
     def create(db: Session, payload: SubscriptionCreate) -> Subscription:
-        if not db.get(Customer, coerce_uuid(payload.customer_id)):
-            raise HTTPException(status_code=404, detail="Customer not found")
+        _require_exists(db, Customer, str(payload.customer_id), "Customer not found")
         item = Subscription(**payload.model_dump())
-        db.add(item)
-        db.commit()
-        db.refresh(item)
+        _persist(db, item)
         logger.info("Created Subscription: %s", item.id)
         return item
 
     @staticmethod
     def get(db: Session, item_id: str) -> Subscription:
-        item = db.get(Subscription, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Subscription not found")
-        return item
+        return _get(db, Subscription, item_id, "Subscription not found")
 
     @staticmethod
     def list(
@@ -305,46 +309,40 @@ class Subscriptions(ListResponseMixin):
         limit: int,
         offset: int,
     ) -> tuple[list[Subscription], int]:
-        query = db.query(Subscription)
+        query = select(Subscription)
         if customer_id:
-            query = query.filter(Subscription.customer_id == coerce_uuid(customer_id))
+            query = query.where(Subscription.customer_id == coerce_uuid(customer_id))
         if status:
-            query = query.filter(
+            query = query.where(
                 Subscription.status
                 == validate_enum(status, SubscriptionStatus, "status")
             )
         if is_active is not None:
-            query = query.filter(Subscription.is_active == is_active)
-        total = query.count()
-        query = apply_ordering(
+            query = query.where(Subscription.is_active == is_active)
+        return _list(
+            db,
             query,
             order_by,
             order_dir,
             {"created_at": Subscription.created_at},
+            limit,
+            offset,
         )
-        items = list(apply_pagination(query, limit, offset).all())
-        return items, total
 
     @staticmethod
     def update(db: Session, item_id: str, payload: SubscriptionUpdate) -> Subscription:
-        item = db.get(Subscription, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Subscription not found")
+        item = _get(db, Subscription, item_id, "Subscription not found")
         for key, value in payload.model_dump(exclude_unset=True).items():
             setattr(item, key, value)
-        db.commit()
-        db.refresh(item)
+        _flush(db, item)
         logger.info("Updated %s: %s", Subscription.__name__, item.id)
         return item
 
     @staticmethod
     def delete(db: Session, item_id: str) -> None:
-        item = db.get(Subscription, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Subscription not found")
+        item = _get(db, Subscription, item_id, "Subscription not found")
         item.is_active = False
-        db.commit()
-        db.refresh(item)
+        _flush(db, item)
         logger.info("Soft-deleted %s: %s", Subscription.__name__, item.id)
 
 
@@ -354,23 +352,18 @@ class Subscriptions(ListResponseMixin):
 class SubscriptionItems(ListResponseMixin):
     @staticmethod
     def create(db: Session, payload: SubscriptionItemCreate) -> SubscriptionItem:
-        if not db.get(Subscription, coerce_uuid(payload.subscription_id)):
-            raise HTTPException(status_code=404, detail="Subscription not found")
-        if not db.get(Price, coerce_uuid(payload.price_id)):
-            raise HTTPException(status_code=404, detail="Price not found")
+        _require_exists(
+            db, Subscription, str(payload.subscription_id), "Subscription not found"
+        )
+        _require_exists(db, Price, str(payload.price_id), "Price not found")
         item = SubscriptionItem(**payload.model_dump())
-        db.add(item)
-        db.commit()
-        db.refresh(item)
+        _persist(db, item)
         logger.info("Created SubscriptionItem: %s", item.id)
         return item
 
     @staticmethod
     def get(db: Session, item_id: str) -> SubscriptionItem:
-        item = db.get(SubscriptionItem, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Subscription item not found")
-        return item
+        return _get(db, SubscriptionItem, item_id, "Subscription item not found")
 
     @staticmethod
     def list(
@@ -382,45 +375,39 @@ class SubscriptionItems(ListResponseMixin):
         limit: int,
         offset: int,
     ) -> tuple[list[SubscriptionItem], int]:
-        query = db.query(SubscriptionItem)
+        query = select(SubscriptionItem)
         if subscription_id:
-            query = query.filter(
+            query = query.where(
                 SubscriptionItem.subscription_id == coerce_uuid(subscription_id)
             )
         if price_id:
-            query = query.filter(SubscriptionItem.price_id == coerce_uuid(price_id))
-        total = query.count()
-        query = apply_ordering(
+            query = query.where(SubscriptionItem.price_id == coerce_uuid(price_id))
+        return _list(
+            db,
             query,
             order_by,
             order_dir,
             {"created_at": SubscriptionItem.created_at},
+            limit,
+            offset,
         )
-        items = list(apply_pagination(query, limit, offset).all())
-        return items, total
 
     @staticmethod
     def update(
         db: Session, item_id: str, payload: SubscriptionItemUpdate
     ) -> SubscriptionItem:
-        item = db.get(SubscriptionItem, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Subscription item not found")
+        item = _get(db, SubscriptionItem, item_id, "Subscription item not found")
         for key, value in payload.model_dump(exclude_unset=True).items():
             setattr(item, key, value)
-        db.commit()
-        db.refresh(item)
+        _flush(db, item)
         logger.info("Updated %s: %s", SubscriptionItem.__name__, item.id)
         return item
 
     @staticmethod
     def delete(db: Session, item_id: str) -> None:
-        item = db.get(SubscriptionItem, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Subscription item not found")
+        item = _get(db, SubscriptionItem, item_id, "Subscription item not found")
         item.is_active = False
-        db.commit()
-        db.refresh(item)
+        _flush(db, item)
         logger.info("Soft-deleted %s: %s", SubscriptionItem.__name__, item.id)
 
 
@@ -430,25 +417,19 @@ class SubscriptionItems(ListResponseMixin):
 class Invoices(ListResponseMixin):
     @staticmethod
     def create(db: Session, payload: InvoiceCreate) -> Invoice:
-        if not db.get(Customer, coerce_uuid(payload.customer_id)):
-            raise HTTPException(status_code=404, detail="Customer not found")
-        if payload.subscription_id and not db.get(
-            Subscription, coerce_uuid(payload.subscription_id)
-        ):
-            raise HTTPException(status_code=404, detail="Subscription not found")
+        _require_exists(db, Customer, str(payload.customer_id), "Customer not found")
+        if payload.subscription_id:
+            _require_exists(
+                db, Subscription, str(payload.subscription_id), "Subscription not found"
+            )
         item = Invoice(**payload.model_dump())
-        db.add(item)
-        db.commit()
-        db.refresh(item)
+        _persist(db, item)
         logger.info("Created Invoice: %s", item.id)
         return item
 
     @staticmethod
     def get(db: Session, item_id: str) -> Invoice:
-        item = db.get(Invoice, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Invoice not found")
-        return item
+        return _get(db, Invoice, item_id, "Invoice not found")
 
     @staticmethod
     def list(
@@ -461,47 +442,39 @@ class Invoices(ListResponseMixin):
         limit: int,
         offset: int,
     ) -> tuple[list[Invoice], int]:
-        query = db.query(Invoice)
+        query = select(Invoice)
         if customer_id:
-            query = query.filter(Invoice.customer_id == coerce_uuid(customer_id))
+            query = query.where(Invoice.customer_id == coerce_uuid(customer_id))
         if subscription_id:
-            query = query.filter(
-                Invoice.subscription_id == coerce_uuid(subscription_id)
-            )
+            query = query.where(Invoice.subscription_id == coerce_uuid(subscription_id))
         if status:
-            query = query.filter(
+            query = query.where(
                 Invoice.status == validate_enum(status, InvoiceStatus, "status")
             )
-        total = query.count()
-        query = apply_ordering(
+        return _list(
+            db,
             query,
             order_by,
             order_dir,
             {"created_at": Invoice.created_at, "total": Invoice.total},
+            limit,
+            offset,
         )
-        items = list(apply_pagination(query, limit, offset).all())
-        return items, total
 
     @staticmethod
     def update(db: Session, item_id: str, payload: InvoiceUpdate) -> Invoice:
-        item = db.get(Invoice, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Invoice not found")
+        item = _get(db, Invoice, item_id, "Invoice not found")
         for key, value in payload.model_dump(exclude_unset=True).items():
             setattr(item, key, value)
-        db.commit()
-        db.refresh(item)
+        _flush(db, item)
         logger.info("Updated %s: %s", Invoice.__name__, item.id)
         return item
 
     @staticmethod
     def delete(db: Session, item_id: str) -> None:
-        item = db.get(Invoice, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Invoice not found")
+        item = _get(db, Invoice, item_id, "Invoice not found")
         item.is_active = False
-        db.commit()
-        db.refresh(item)
+        _flush(db, item)
         logger.info("Soft-deleted %s: %s", Invoice.__name__, item.id)
 
 
@@ -511,27 +484,24 @@ class Invoices(ListResponseMixin):
 class InvoiceItems(ListResponseMixin):
     @staticmethod
     def create(db: Session, payload: InvoiceItemCreate) -> InvoiceItem:
-        if not db.get(Invoice, coerce_uuid(payload.invoice_id)):
-            raise HTTPException(status_code=404, detail="Invoice not found")
-        if payload.price_id and not db.get(Price, coerce_uuid(payload.price_id)):
-            raise HTTPException(status_code=404, detail="Price not found")
-        if payload.subscription_item_id and not db.get(
-            SubscriptionItem, coerce_uuid(payload.subscription_item_id)
-        ):
-            raise HTTPException(status_code=404, detail="Subscription item not found")
+        _require_exists(db, Invoice, str(payload.invoice_id), "Invoice not found")
+        if payload.price_id:
+            _require_exists(db, Price, str(payload.price_id), "Price not found")
+        if payload.subscription_item_id:
+            _require_exists(
+                db,
+                SubscriptionItem,
+                str(payload.subscription_item_id),
+                "Subscription item not found",
+            )
         item = InvoiceItem(**payload.model_dump())
-        db.add(item)
-        db.commit()
-        db.refresh(item)
+        _persist(db, item)
         logger.info("Created InvoiceItem: %s", item.id)
         return item
 
     @staticmethod
     def get(db: Session, item_id: str) -> InvoiceItem:
-        item = db.get(InvoiceItem, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Invoice item not found")
-        return item
+        return _get(db, InvoiceItem, item_id, "Invoice item not found")
 
     @staticmethod
     def list(
@@ -542,38 +512,33 @@ class InvoiceItems(ListResponseMixin):
         limit: int,
         offset: int,
     ) -> tuple[list[InvoiceItem], int]:
-        query = db.query(InvoiceItem)
+        query = select(InvoiceItem)
         if invoice_id:
-            query = query.filter(InvoiceItem.invoice_id == coerce_uuid(invoice_id))
-        total = query.count()
-        query = apply_ordering(
+            query = query.where(InvoiceItem.invoice_id == coerce_uuid(invoice_id))
+        return _list(
+            db,
             query,
             order_by,
             order_dir,
             {"created_at": InvoiceItem.created_at},
+            limit,
+            offset,
         )
-        items = list(apply_pagination(query, limit, offset).all())
-        return items, total
 
     @staticmethod
     def update(db: Session, item_id: str, payload: InvoiceItemUpdate) -> InvoiceItem:
-        item = db.get(InvoiceItem, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Invoice item not found")
+        item = _get(db, InvoiceItem, item_id, "Invoice item not found")
         for key, value in payload.model_dump(exclude_unset=True).items():
             setattr(item, key, value)
-        db.commit()
-        db.refresh(item)
+        _flush(db, item)
         logger.info("Updated %s: %s", InvoiceItem.__name__, item.id)
         return item
 
     @staticmethod
     def delete(db: Session, item_id: str) -> None:
-        item = db.get(InvoiceItem, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Invoice item not found")
+        item = _get(db, InvoiceItem, item_id, "Invoice item not found")
         db.delete(item)
-        db.commit()
+        db.flush()
         logger.info("Deleted %s: %s", InvoiceItem.__name__, item_id)
 
 
@@ -583,21 +548,15 @@ class InvoiceItems(ListResponseMixin):
 class PaymentMethods(ListResponseMixin):
     @staticmethod
     def create(db: Session, payload: PaymentMethodCreate) -> PaymentMethod:
-        if not db.get(Customer, coerce_uuid(payload.customer_id)):
-            raise HTTPException(status_code=404, detail="Customer not found")
+        _require_exists(db, Customer, str(payload.customer_id), "Customer not found")
         item = PaymentMethod(**payload.model_dump())
-        db.add(item)
-        db.commit()
-        db.refresh(item)
+        _persist(db, item)
         logger.info("Created PaymentMethod: %s", item.id)
         return item
 
     @staticmethod
     def get(db: Session, item_id: str) -> PaymentMethod:
-        item = db.get(PaymentMethod, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Payment method not found")
-        return item
+        return _get(db, PaymentMethod, item_id, "Payment method not found")
 
     @staticmethod
     def list(
@@ -610,47 +569,43 @@ class PaymentMethods(ListResponseMixin):
         limit: int,
         offset: int,
     ) -> tuple[list[PaymentMethod], int]:
-        query = db.query(PaymentMethod)
+        query = select(PaymentMethod)
         if customer_id:
-            query = query.filter(PaymentMethod.customer_id == coerce_uuid(customer_id))
+            query = query.where(
+                PaymentMethod.customer_id == coerce_uuid(customer_id)
+            )
         if type:
-            query = query.filter(
+            query = query.where(
                 PaymentMethod.type == validate_enum(type, PaymentMethodType, "type")
             )
         if is_active is not None:
-            query = query.filter(PaymentMethod.is_active == is_active)
-        total = query.count()
-        query = apply_ordering(
+            query = query.where(PaymentMethod.is_active == is_active)
+        return _list(
+            db,
             query,
             order_by,
             order_dir,
             {"created_at": PaymentMethod.created_at},
+            limit,
+            offset,
         )
-        items = list(apply_pagination(query, limit, offset).all())
-        return items, total
 
     @staticmethod
     def update(
         db: Session, item_id: str, payload: PaymentMethodUpdate
     ) -> PaymentMethod:
-        item = db.get(PaymentMethod, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Payment method not found")
+        item = _get(db, PaymentMethod, item_id, "Payment method not found")
         for key, value in payload.model_dump(exclude_unset=True).items():
             setattr(item, key, value)
-        db.commit()
-        db.refresh(item)
+        _flush(db, item)
         logger.info("Updated %s: %s", PaymentMethod.__name__, item.id)
         return item
 
     @staticmethod
     def delete(db: Session, item_id: str) -> None:
-        item = db.get(PaymentMethod, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Payment method not found")
+        item = _get(db, PaymentMethod, item_id, "Payment method not found")
         item.is_active = False
-        db.commit()
-        db.refresh(item)
+        _flush(db, item)
         logger.info("Soft-deleted %s: %s", PaymentMethod.__name__, item.id)
 
 
@@ -660,27 +615,24 @@ class PaymentMethods(ListResponseMixin):
 class PaymentIntents(ListResponseMixin):
     @staticmethod
     def create(db: Session, payload: PaymentIntentCreate) -> PaymentIntent:
-        if not db.get(Customer, coerce_uuid(payload.customer_id)):
-            raise HTTPException(status_code=404, detail="Customer not found")
-        if payload.invoice_id and not db.get(Invoice, coerce_uuid(payload.invoice_id)):
-            raise HTTPException(status_code=404, detail="Invoice not found")
-        if payload.payment_method_id and not db.get(
-            PaymentMethod, coerce_uuid(payload.payment_method_id)
-        ):
-            raise HTTPException(status_code=404, detail="Payment method not found")
+        _require_exists(db, Customer, str(payload.customer_id), "Customer not found")
+        if payload.invoice_id:
+            _require_exists(db, Invoice, str(payload.invoice_id), "Invoice not found")
+        if payload.payment_method_id:
+            _require_exists(
+                db,
+                PaymentMethod,
+                str(payload.payment_method_id),
+                "Payment method not found",
+            )
         item = PaymentIntent(**payload.model_dump())
-        db.add(item)
-        db.commit()
-        db.refresh(item)
+        _persist(db, item)
         logger.info("Created PaymentIntent: %s", item.id)
         return item
 
     @staticmethod
     def get(db: Session, item_id: str) -> PaymentIntent:
-        item = db.get(PaymentIntent, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Payment intent not found")
-        return item
+        return _get(db, PaymentIntent, item_id, "Payment intent not found")
 
     @staticmethod
     def list(
@@ -693,37 +645,36 @@ class PaymentIntents(ListResponseMixin):
         limit: int,
         offset: int,
     ) -> tuple[list[PaymentIntent], int]:
-        query = db.query(PaymentIntent)
+        query = select(PaymentIntent)
         if customer_id:
-            query = query.filter(PaymentIntent.customer_id == coerce_uuid(customer_id))
+            query = query.where(
+                PaymentIntent.customer_id == coerce_uuid(customer_id)
+            )
         if invoice_id:
-            query = query.filter(PaymentIntent.invoice_id == coerce_uuid(invoice_id))
+            query = query.where(PaymentIntent.invoice_id == coerce_uuid(invoice_id))
         if status:
-            query = query.filter(
+            query = query.where(
                 PaymentIntent.status
                 == validate_enum(status, PaymentIntentStatus, "status")
             )
-        total = query.count()
-        query = apply_ordering(
+        return _list(
+            db,
             query,
             order_by,
             order_dir,
             {"created_at": PaymentIntent.created_at},
+            limit,
+            offset,
         )
-        items = list(apply_pagination(query, limit, offset).all())
-        return items, total
 
     @staticmethod
     def update(
         db: Session, item_id: str, payload: PaymentIntentUpdate
     ) -> PaymentIntent:
-        item = db.get(PaymentIntent, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Payment intent not found")
+        item = _get(db, PaymentIntent, item_id, "Payment intent not found")
         for key, value in payload.model_dump(exclude_unset=True).items():
             setattr(item, key, value)
-        db.commit()
-        db.refresh(item)
+        _flush(db, item)
         logger.info("Updated %s: %s", PaymentIntent.__name__, item.id)
         return item
 
@@ -734,21 +685,20 @@ class PaymentIntents(ListResponseMixin):
 class UsageRecords(ListResponseMixin):
     @staticmethod
     def create(db: Session, payload: UsageRecordCreate) -> UsageRecord:
-        if not db.get(SubscriptionItem, coerce_uuid(payload.subscription_item_id)):
-            raise HTTPException(status_code=404, detail="Subscription item not found")
+        _require_exists(
+            db,
+            SubscriptionItem,
+            str(payload.subscription_item_id),
+            "Subscription item not found",
+        )
         item = UsageRecord(**payload.model_dump())
-        db.add(item)
-        db.commit()
-        db.refresh(item)
+        _persist(db, item)
         logger.info("Created UsageRecord: %s", item.id)
         return item
 
     @staticmethod
     def get(db: Session, item_id: str) -> UsageRecord:
-        item = db.get(UsageRecord, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Usage record not found")
-        return item
+        return _get(db, UsageRecord, item_id, "Usage record not found")
 
     @staticmethod
     def list(
@@ -759,13 +709,13 @@ class UsageRecords(ListResponseMixin):
         limit: int,
         offset: int,
     ) -> tuple[list[UsageRecord], int]:
-        query = db.query(UsageRecord)
+        query = select(UsageRecord)
         if subscription_item_id:
-            query = query.filter(
+            query = query.where(
                 UsageRecord.subscription_item_id == coerce_uuid(subscription_item_id)
             )
-        total = query.count()
-        query = apply_ordering(
+        return _list(
+            db,
             query,
             order_by,
             order_dir,
@@ -773,9 +723,9 @@ class UsageRecords(ListResponseMixin):
                 "created_at": UsageRecord.created_at,
                 "recorded_at": UsageRecord.recorded_at,
             },
+            limit,
+            offset,
         )
-        items = list(apply_pagination(query, limit, offset).all())
-        return items, total
 
 
 # ── Coupons ──────────────────────────────────────────────
@@ -785,18 +735,13 @@ class Coupons(ListResponseMixin):
     @staticmethod
     def create(db: Session, payload: CouponCreate) -> Coupon:
         item = Coupon(**payload.model_dump())
-        db.add(item)
-        db.commit()
-        db.refresh(item)
+        _persist(db, item)
         logger.info("Created Coupon: %s", item.id)
         return item
 
     @staticmethod
     def get(db: Session, item_id: str) -> Coupon:
-        item = db.get(Coupon, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Coupon not found")
-        return item
+        return _get(db, Coupon, item_id, "Coupon not found")
 
     @staticmethod
     def list(
@@ -808,41 +753,35 @@ class Coupons(ListResponseMixin):
         limit: int,
         offset: int,
     ) -> tuple[list[Coupon], int]:
-        query = db.query(Coupon)
+        query = select(Coupon)
         if valid is not None:
-            query = query.filter(Coupon.valid == valid)
+            query = query.where(Coupon.valid == valid)
         if code:
-            query = query.filter(Coupon.code == code)
-        total = query.count()
-        query = apply_ordering(
+            query = query.where(Coupon.code == code)
+        return _list(
+            db,
             query,
             order_by,
             order_dir,
             {"created_at": Coupon.created_at, "name": Coupon.name},
+            limit,
+            offset,
         )
-        items = list(apply_pagination(query, limit, offset).all())
-        return items, total
 
     @staticmethod
     def update(db: Session, item_id: str, payload: CouponUpdate) -> Coupon:
-        item = db.get(Coupon, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Coupon not found")
+        item = _get(db, Coupon, item_id, "Coupon not found")
         for key, value in payload.model_dump(exclude_unset=True).items():
             setattr(item, key, value)
-        db.commit()
-        db.refresh(item)
+        _flush(db, item)
         logger.info("Updated %s: %s", Coupon.__name__, item.id)
         return item
 
     @staticmethod
     def delete(db: Session, item_id: str) -> None:
-        item = db.get(Coupon, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Coupon not found")
+        item = _get(db, Coupon, item_id, "Coupon not found")
         item.valid = False
-        db.commit()
-        db.refresh(item)
+        _flush(db, item)
         logger.info("Soft-deleted Coupon: %s", item.id)
 
 
@@ -852,29 +791,21 @@ class Coupons(ListResponseMixin):
 class Discounts(ListResponseMixin):
     @staticmethod
     def create(db: Session, payload: DiscountCreate) -> Discount:
-        if not db.get(Coupon, coerce_uuid(payload.coupon_id)):
-            raise HTTPException(status_code=404, detail="Coupon not found")
-        if payload.customer_id and not db.get(
-            Customer, coerce_uuid(payload.customer_id)
-        ):
-            raise HTTPException(status_code=404, detail="Customer not found")
-        if payload.subscription_id and not db.get(
-            Subscription, coerce_uuid(payload.subscription_id)
-        ):
-            raise HTTPException(status_code=404, detail="Subscription not found")
+        _require_exists(db, Coupon, str(payload.coupon_id), "Coupon not found")
+        if payload.customer_id:
+            _require_exists(db, Customer, str(payload.customer_id), "Customer not found")
+        if payload.subscription_id:
+            _require_exists(
+                db, Subscription, str(payload.subscription_id), "Subscription not found"
+            )
         item = Discount(**payload.model_dump())
-        db.add(item)
-        db.commit()
-        db.refresh(item)
+        _persist(db, item)
         logger.info("Created Discount: %s", item.id)
         return item
 
     @staticmethod
     def get(db: Session, item_id: str) -> Discount:
-        item = db.get(Discount, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Discount not found")
-        return item
+        return _get(db, Discount, item_id, "Discount not found")
 
     @staticmethod
     def list(
@@ -887,32 +818,30 @@ class Discounts(ListResponseMixin):
         limit: int,
         offset: int,
     ) -> tuple[list[Discount], int]:
-        query = db.query(Discount)
+        query = select(Discount)
         if customer_id:
-            query = query.filter(Discount.customer_id == coerce_uuid(customer_id))
+            query = query.where(Discount.customer_id == coerce_uuid(customer_id))
         if subscription_id:
-            query = query.filter(
+            query = query.where(
                 Discount.subscription_id == coerce_uuid(subscription_id)
             )
         if coupon_id:
-            query = query.filter(Discount.coupon_id == coerce_uuid(coupon_id))
-        total = query.count()
-        query = apply_ordering(
+            query = query.where(Discount.coupon_id == coerce_uuid(coupon_id))
+        return _list(
+            db,
             query,
             order_by,
             order_dir,
             {"created_at": Discount.created_at},
+            limit,
+            offset,
         )
-        items = list(apply_pagination(query, limit, offset).all())
-        return items, total
 
     @staticmethod
     def delete(db: Session, item_id: str) -> None:
-        item = db.get(Discount, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Discount not found")
+        item = _get(db, Discount, item_id, "Discount not found")
         db.delete(item)
-        db.commit()
+        db.flush()
         logger.info("Deleted %s: %s", Discount.__name__, item_id)
 
 
@@ -922,21 +851,15 @@ class Discounts(ListResponseMixin):
 class Entitlements(ListResponseMixin):
     @staticmethod
     def create(db: Session, payload: EntitlementCreate) -> Entitlement:
-        if not db.get(Product, coerce_uuid(payload.product_id)):
-            raise HTTPException(status_code=404, detail="Product not found")
+        _require_exists(db, Product, str(payload.product_id), "Product not found")
         item = Entitlement(**payload.model_dump())
-        db.add(item)
-        db.commit()
-        db.refresh(item)
+        _persist(db, item)
         logger.info("Created Entitlement: %s", item.id)
         return item
 
     @staticmethod
     def get(db: Session, item_id: str) -> Entitlement:
-        item = db.get(Entitlement, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Entitlement not found")
-        return item
+        return _get(db, Entitlement, item_id, "Entitlement not found")
 
     @staticmethod
     def list(
@@ -948,40 +871,35 @@ class Entitlements(ListResponseMixin):
         limit: int,
         offset: int,
     ) -> tuple[list[Entitlement], int]:
-        query = db.query(Entitlement)
+        query = select(Entitlement)
         if product_id:
-            query = query.filter(Entitlement.product_id == coerce_uuid(product_id))
+            query = query.where(Entitlement.product_id == coerce_uuid(product_id))
         if feature_key:
-            query = query.filter(Entitlement.feature_key == feature_key)
-        total = query.count()
-        query = apply_ordering(
+            query = query.where(Entitlement.feature_key == feature_key)
+        return _list(
+            db,
             query,
             order_by,
             order_dir,
             {"created_at": Entitlement.created_at},
+            limit,
+            offset,
         )
-        items = list(apply_pagination(query, limit, offset).all())
-        return items, total
 
     @staticmethod
     def update(db: Session, item_id: str, payload: EntitlementUpdate) -> Entitlement:
-        item = db.get(Entitlement, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Entitlement not found")
+        item = _get(db, Entitlement, item_id, "Entitlement not found")
         for key, value in payload.model_dump(exclude_unset=True).items():
             setattr(item, key, value)
-        db.commit()
-        db.refresh(item)
+        _flush(db, item)
         logger.info("Updated %s: %s", Entitlement.__name__, item.id)
         return item
 
     @staticmethod
     def delete(db: Session, item_id: str) -> None:
-        item = db.get(Entitlement, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Entitlement not found")
+        item = _get(db, Entitlement, item_id, "Entitlement not found")
         db.delete(item)
-        db.commit()
+        db.flush()
         logger.info("Deleted %s: %s", Entitlement.__name__, item_id)
 
 
@@ -992,18 +910,13 @@ class WebhookEvents(ListResponseMixin):
     @staticmethod
     def create(db: Session, payload: WebhookEventCreate) -> WebhookEvent:
         item = WebhookEvent(**payload.model_dump())
-        db.add(item)
-        db.commit()
-        db.refresh(item)
+        _persist(db, item)
         logger.info("Created WebhookEvent: %s", item.id)
         return item
 
     @staticmethod
     def get(db: Session, item_id: str) -> WebhookEvent:
-        item = db.get(WebhookEvent, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Webhook event not found")
-        return item
+        return _get(db, WebhookEvent, item_id, "Webhook event not found")
 
     @staticmethod
     def list(
@@ -1016,35 +929,32 @@ class WebhookEvents(ListResponseMixin):
         limit: int,
         offset: int,
     ) -> tuple[list[WebhookEvent], int]:
-        query = db.query(WebhookEvent)
+        query = select(WebhookEvent)
         if provider:
-            query = query.filter(WebhookEvent.provider == provider)
+            query = query.where(WebhookEvent.provider == provider)
         if event_type:
-            query = query.filter(WebhookEvent.event_type == event_type)
+            query = query.where(WebhookEvent.event_type == event_type)
         if status:
-            query = query.filter(
+            query = query.where(
                 WebhookEvent.status
                 == validate_enum(status, WebhookEventStatus, "status")
             )
-        total = query.count()
-        query = apply_ordering(
+        return _list(
+            db,
             query,
             order_by,
             order_dir,
             {"created_at": WebhookEvent.created_at},
+            limit,
+            offset,
         )
-        items = list(apply_pagination(query, limit, offset).all())
-        return items, total
 
     @staticmethod
     def update(db: Session, item_id: str, payload: WebhookEventUpdate) -> WebhookEvent:
-        item = db.get(WebhookEvent, coerce_uuid(item_id))
-        if not item:
-            raise HTTPException(status_code=404, detail="Webhook event not found")
+        item = _get(db, WebhookEvent, item_id, "Webhook event not found")
         for key, value in payload.model_dump(exclude_unset=True).items():
             setattr(item, key, value)
-        db.commit()
-        db.refresh(item)
+        _flush(db, item)
         logger.info("Updated %s: %s", WebhookEvent.__name__, item.id)
         return item
 

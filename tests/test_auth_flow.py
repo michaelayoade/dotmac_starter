@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pyotp
 import pytest
@@ -8,8 +8,8 @@ from fastapi import HTTPException
 from jose import jwt
 from starlette.requests import Request
 
-from app.models.auth import Session as AuthSession, SessionStatus, UserCredential
-from app.models.auth import AuthProvider
+from app.models.auth import AuthProvider, SessionStatus, UserCredential
+from app.models.auth import Session as AuthSession
 from app.services.auth_flow import AuthFlow, decode_access_token, hash_password
 from tests.mocks import FakeHTTPXResponse
 
@@ -84,6 +84,11 @@ def test_mfa_setup_confirm(db_session, person, monkeypatch):
     assert method.is_primary is True
     assert method.is_active is True
     assert method.verified_at is not None
+    assert method.last_totp_counter is not None
+
+    with pytest.raises(HTTPException) as exc:
+        AuthFlow.mfa_confirm(db_session, str(setup["method_id"]), code)
+    assert exc.value.status_code == 401
 
 
 def test_decode_access_token_uses_openbao_secret(monkeypatch):
@@ -104,7 +109,7 @@ def test_decode_access_token_uses_openbao_secret(monkeypatch):
 
     monkeypatch.setattr(httpx, "get", mock_get)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "sub": "user-id",
         "session_id": "session-id",

@@ -7,6 +7,7 @@ from app.models.domain_settings import SettingDomain, SettingValueType
 from app.schemas.settings import DomainSettingCreate, DomainSettingUpdate
 from app.services import domain_settings as domain_settings_service
 from app.services import settings_api as settings_api_service
+from app.services.exceptions import BadRequestError
 
 
 def test_domain_setting_domain_mismatch(db_session):
@@ -21,13 +22,12 @@ def test_domain_setting_domain_mismatch(db_session):
             value_json=True,
         ),
     )
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(BadRequestError):
         settings.update(
             db_session,
             str(created.id),
             DomainSettingUpdate(domain=SettingDomain.audit),
         )
-    assert exc.value.status_code == 400
 
 
 def test_settings_api_auth_upsert_and_validation(db_session):

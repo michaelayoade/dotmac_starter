@@ -1,9 +1,10 @@
-from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.domain_settings import DomainSetting, SettingDomain, SettingValueType
 from app.schemas.settings import DomainSettingCreate, DomainSettingUpdate
 from app.services.common import coerce_uuid
+from app.services.exceptions import BadRequestError, NotFoundError
 from app.services.query_utils import apply_ordering, apply_pagination
 from app.services.response import ListResponseMixin
 
@@ -14,26 +15,25 @@ class DomainSettings(ListResponseMixin):
 
     def _resolve_domain(self, payload_domain: SettingDomain | None) -> SettingDomain:
         if self.domain and payload_domain and payload_domain != self.domain:
-            raise HTTPException(status_code=400, detail="Setting domain mismatch")
+            raise BadRequestError("Setting domain mismatch")
         if self.domain:
             return self.domain
         if payload_domain:
             return payload_domain
-        raise HTTPException(status_code=400, detail="Setting domain is required")
+        raise BadRequestError("Setting domain is required")
 
     def create(self, db: Session, payload: DomainSettingCreate):
         data = payload.model_dump()
         data["domain"] = self._resolve_domain(payload.domain)
         setting = DomainSetting(**data)
         db.add(setting)
-        db.commit()
-        db.refresh(setting)
+        db.flush()
         return setting
 
     def get(self, db: Session, setting_id: str):
         setting = db.get(DomainSetting, coerce_uuid(setting_id))
         if not setting or (self.domain and setting.domain != self.domain):
-            raise HTTPException(status_code=404, detail="Setting not found")
+            raise NotFoundError("Setting not found")
         return setting
 
     def list(
@@ -46,56 +46,53 @@ class DomainSettings(ListResponseMixin):
         limit: int,
         offset: int,
     ):
-        query = db.query(DomainSetting)
+        query = select(DomainSetting)
         effective_domain = self.domain or domain
         if effective_domain:
-            query = query.filter(DomainSetting.domain == effective_domain)
+            query = query.where(DomainSetting.domain == effective_domain)
         if is_active is None:
-            query = query.filter(DomainSetting.is_active.is_(True))
+            query = query.where(DomainSetting.is_active.is_(True))
         else:
-            query = query.filter(DomainSetting.is_active == is_active)
+            query = query.where(DomainSetting.is_active == is_active)
         query = apply_ordering(
             query,
             order_by,
             order_dir,
             {"created_at": DomainSetting.created_at, "key": DomainSetting.key},
         )
-        return apply_pagination(query, limit, offset).all()
+        return list(db.scalars(apply_pagination(query, limit, offset)).all())
 
     def update(self, db: Session, setting_id: str, payload: DomainSettingUpdate):
         setting = db.get(DomainSetting, coerce_uuid(setting_id))
         if not setting or (self.domain and setting.domain != self.domain):
-            raise HTTPException(status_code=404, detail="Setting not found")
+            raise NotFoundError("Setting not found")
         data = payload.model_dump(exclude_unset=True)
         if "domain" in data and data["domain"] != setting.domain:
-            raise HTTPException(status_code=400, detail="Setting domain mismatch")
+            raise BadRequestError("Setting domain mismatch")
         for key, value in data.items():
             setattr(setting, key, value)
-        db.commit()
-        db.refresh(setting)
+        db.flush()
         return setting
 
     def get_by_key(self, db: Session, key: str):
         if not self.domain:
-            raise HTTPException(status_code=400, detail="Setting domain is required")
-        setting = (
-            db.query(DomainSetting)
-            .filter(DomainSetting.domain == self.domain)
-            .filter(DomainSetting.key == key)
-            .first()
+            raise BadRequestError("Setting domain is required")
+        setting = db.scalar(
+            select(DomainSetting)
+            .where(DomainSetting.domain == self.domain)
+            .where(DomainSetting.key == key)
         )
         if not setting:
-            raise HTTPException(status_code=404, detail="Setting not found")
+            raise NotFoundError("Setting not found")
         return setting
 
     def upsert_by_key(self, db: Session, key: str, payload: DomainSettingUpdate):
         if not self.domain:
-            raise HTTPException(status_code=400, detail="Setting domain is required")
-        setting = (
-            db.query(DomainSetting)
-            .filter(DomainSetting.domain == self.domain)
-            .filter(DomainSetting.key == key)
-            .first()
+            raise BadRequestError("Setting domain is required")
+        setting = db.scalar(
+            select(DomainSetting)
+            .where(DomainSetting.domain == self.domain)
+            .where(DomainSetting.key == key)
         )
         if setting:
             data = payload.model_dump(exclude_unset=True)
@@ -103,8 +100,7 @@ class DomainSettings(ListResponseMixin):
             data.pop("key", None)
             for field, value in data.items():
                 setattr(setting, field, value)
-            db.commit()
-            db.refresh(setting)
+            db.flush()
             return setting
         create_payload = DomainSettingCreate(
             domain=self.domain,
@@ -127,12 +123,11 @@ class DomainSettings(ListResponseMixin):
         is_secret: bool = False,
     ):
         if not self.domain:
-            raise HTTPException(status_code=400, detail="Setting domain is required")
-        existing = (
-            db.query(DomainSetting)
-            .filter(DomainSetting.domain == self.domain)
-            .filter(DomainSetting.key == key)
-            .first()
+            raise BadRequestError("Setting domain is required")
+        existing = db.scalar(
+            select(DomainSetting)
+            .where(DomainSetting.domain == self.domain)
+            .where(DomainSetting.key == key)
         )
         if existing:
             return existing
@@ -148,11 +143,11 @@ class DomainSettings(ListResponseMixin):
         return self.create(db, payload)
 
     def delete(self, db: Session, setting_id: str):
-        setting = db.get(DomainSetting, setting_id)
+        setting = db.get(DomainSetting, coerce_uuid(setting_id))
         if not setting or (self.domain and setting.domain != self.domain):
-            raise HTTPException(status_code=404, detail="Setting not found")
+            raise NotFoundError("Setting not found")
         setting.is_active = False
-        db.commit()
+        db.flush()
 
 
 settings = DomainSettings()

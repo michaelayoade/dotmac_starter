@@ -3,12 +3,16 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
+from app.api.deps import get_db, require_user_auth
 from app.schemas.common import ListResponse
 from app.schemas.file_upload import FileUploadRead
 from app.services.file_upload import FileUploadService
 
-router = APIRouter(prefix="/file-uploads", tags=["file-uploads"])
+router = APIRouter(
+    prefix="/file-uploads",
+    tags=["file-uploads"],
+    dependencies=[Depends(require_user_auth)],
+)
 
 
 @router.post("", response_model=FileUploadRead, status_code=status.HTTP_201_CREATED)

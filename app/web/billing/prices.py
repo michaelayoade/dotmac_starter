@@ -152,6 +152,7 @@ async def create_price_submit(
             is_active=data.get("is_active") == "on",
         )
         billing_service.prices.create(db, payload)
+        db.commit()
         logger.info("Created price via web for product: %s", payload.product_id)
         return RedirectResponse(
             url="/admin/billing/prices?success=Price+created+successfully",
@@ -256,6 +257,7 @@ async def edit_price_submit(
             is_active="is_active" in data,
         )
         billing_service.prices.update(db, str(item_id), payload)
+        db.commit()
         logger.info("Updated price via web: %s", item_id)
         return RedirectResponse(
             url=f"/admin/billing/prices/{item_id}?success=Price+updated+successfully",
@@ -294,6 +296,7 @@ async def delete_price(
 
     try:
         billing_service.prices.delete(db, str(item_id))
+        db.commit()
         logger.info("Deleted price via web: %s", item_id)
         return RedirectResponse(
             url="/admin/billing/prices?success=Price+deleted+successfully",

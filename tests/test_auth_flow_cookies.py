@@ -1,14 +1,13 @@
 """Tests for auth_flow cookie settings - domain/samesite/secure and concurrent refresh."""
 
-import os
 import uuid
-from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from starlette.requests import Request
 
-from app.models.auth import Session as AuthSession, SessionStatus, UserCredential
+from app.models.auth import Session as AuthSession
+from app.models.auth import SessionStatus, UserCredential
 from app.models.domain_settings import DomainSetting, SettingDomain
 from app.services.auth_flow import (
     AuthFlow,
@@ -75,9 +74,9 @@ class TestRefreshCookieSettings:
             assert _refresh_cookie_secure(None) is False
 
     def test_cookie_secure_default(self, monkeypatch):
-        """Test default secure=false."""
+        """Test default secure=true."""
         monkeypatch.delenv("REFRESH_COOKIE_SECURE", raising=False)
-        assert _refresh_cookie_secure(None) is False
+        assert _refresh_cookie_secure(None) is True
 
     def test_cookie_secure_from_db(self, db_session, monkeypatch):
         """Test secure setting from database."""
@@ -160,7 +159,7 @@ class TestRefreshCookieSettingsDict:
 
         assert settings["key"] == "refresh_token"
         assert settings["httponly"] is True
-        assert settings["secure"] is False
+        assert settings["secure"] is True
         assert settings["samesite"] == "lax"
         assert settings["domain"] is None
         assert settings["path"] == "/"
@@ -335,7 +334,7 @@ class TestConcurrentRefreshRotation:
             .filter(AuthSession.person_id == person.id)
             .first()
         )
-        session.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
+        session.expires_at = datetime.now(UTC) - timedelta(hours=1)
         db_session.commit()
 
         from fastapi import HTTPException

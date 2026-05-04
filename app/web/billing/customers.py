@@ -123,6 +123,7 @@ async def create_customer_submit(
             is_active=data.get("is_active") == "on",
         )
         billing_service.customers.create(db, payload)
+        db.commit()
         logger.info("Created customer via web: %s", payload.email)
         return RedirectResponse(
             url="/admin/billing/customers?success=Customer+created+successfully",
@@ -219,6 +220,7 @@ async def edit_customer_submit(
             is_active="is_active" in data,
         )
         billing_service.customers.update(db, str(item_id), payload)
+        db.commit()
         logger.info("Updated customer via web: %s", item_id)
         return RedirectResponse(
             url=f"/admin/billing/customers/{item_id}?success=Customer+updated+successfully",
@@ -248,6 +250,7 @@ async def delete_customer(
 
     try:
         billing_service.customers.delete(db, str(item_id))
+        db.commit()
         logger.info("Deleted customer via web: %s", item_id)
         return RedirectResponse(
             url="/admin/billing/customers?success=Customer+deleted+successfully",

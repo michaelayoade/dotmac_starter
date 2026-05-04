@@ -17,6 +17,8 @@ from fastapi import HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.services.exceptions import BadRequestError, NotFoundError
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,6 +37,26 @@ def _error_payload(code: str, message: str, details: object, request_id: str) ->
 
 
 def register_error_handlers(app: object) -> None:
+    @app.exception_handler(BadRequestError)  # type: ignore[arg-type]
+    async def bad_request_error_handler(
+        request: Request, exc: BadRequestError
+    ) -> JSONResponse:
+        request_id = _get_request_id(request)
+        return JSONResponse(
+            status_code=400,
+            content=_error_payload("bad_request", str(exc), None, request_id),
+        )
+
+    @app.exception_handler(NotFoundError)  # type: ignore[arg-type]
+    async def not_found_error_handler(
+        request: Request, exc: NotFoundError
+    ) -> JSONResponse:
+        request_id = _get_request_id(request)
+        return JSONResponse(
+            status_code=404,
+            content=_error_payload("not_found", str(exc), None, request_id),
+        )
+
     @app.exception_handler(HTTPException)  # type: ignore[arg-type]
     async def http_exception_handler(
         request: Request, exc: HTTPException

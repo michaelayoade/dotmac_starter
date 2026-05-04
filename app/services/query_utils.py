@@ -2,16 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import HTTPException
+from app.services.exceptions import BadRequestError
 
 
 def apply_ordering(
     query: Any, order_by: str, order_dir: str, allowed_columns: dict[str, Any]
 ) -> Any:
     if order_by not in allowed_columns:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid order_by. Allowed: {', '.join(sorted(allowed_columns))}",
+        raise BadRequestError(
+            f"Invalid order_by. Allowed: {', '.join(sorted(allowed_columns))}"
         )
     column = allowed_columns[order_by]
     if order_dir == "desc":
@@ -29,4 +28,4 @@ def validate_enum(value: Any, enum_cls: Any, label: str) -> Any:
     try:
         return enum_cls(value)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid {label}") from exc
+        raise BadRequestError(f"Invalid {label}") from exc

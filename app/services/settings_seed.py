@@ -50,7 +50,7 @@ def seed_auth_settings(db: Session) -> None:
         db,
         key="refresh_cookie_secure",
         value_type=SettingValueType.boolean,
-        value_text=os.getenv("REFRESH_COOKIE_SECURE", "false"),
+        value_text=os.getenv("REFRESH_COOKIE_SECURE", "true"),
     )
     auth_settings.ensure_by_key(
         db,

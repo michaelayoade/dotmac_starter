@@ -77,7 +77,7 @@ A production-ready FastAPI starter template with enterprise-grade features inclu
 
 ### Prerequisites
 
-- Python 3.11 or 3.12
+- Python 3.11, 3.12, or 3.13
 - PostgreSQL 16
 - Redis 7
 - [Poetry](https://python-poetry.org/) (recommended) or pip
@@ -121,9 +121,9 @@ docker compose down
 ```
 
 Services:
-- **App**: http://localhost:8001
-- **PostgreSQL**: localhost:5434
-- **Redis**: localhost:6379
+- **App**: http://localhost:8007
+- **PostgreSQL**: localhost:5436
+- **Redis**: localhost:6381
 
 ### Running Locally
 
@@ -199,6 +199,21 @@ OPENBAO_TOKEN=<token>
 OPENBAO_NAMESPACE=<namespace>
 OPENBAO_KV_VERSION=2
 ```
+
+## Before Going Live
+
+Complete this checklist before forking or deploying this starter to production:
+
+- Set `ENVIRONMENT=production` so missing or weak core secrets fail startup.
+- Generate unique `SECRET_KEY`, `JWT_SECRET`, `API_KEY_HASH_SECRET`, and `TOTP_ENCRYPTION_KEY`; do not reuse example values.
+- Store secrets in OpenBao or another secret manager, and document JWT/API-key hash secret rotation.
+- Keep `REFRESH_COOKIE_SECURE=true`, set an appropriate `REFRESH_COOKIE_DOMAIN`, and only serve auth flows over HTTPS.
+- Set `TRUSTED_PROXY_CIDRS` and `FORWARDED_ALLOW_IPS` to the exact proxy/load-balancer CIDRs that may send `X-Forwarded-*` headers.
+- Run `alembic upgrade head` as a release step before starting new application containers.
+- Confirm PostgreSQL and Redis health checks pass before app, worker, and beat services start.
+- Set `METRICS_TOKEN` unless `/metrics` is exposed only on loopback or a private monitoring network.
+- Review `CORS_ORIGINS`, SMTP settings, storage backend settings, and upload size/type limits for the target environment.
+- Build and scan the container image, publish the generated SBOM, and block deployment on high or critical dependency/image CVEs.
 
 ## API Endpoints
 

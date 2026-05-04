@@ -197,6 +197,7 @@ async def edit_subscription_submit(
             is_active="is_active" in data,
         )
         billing_service.subscriptions.update(db, str(item_id), payload)
+        db.commit()
         logger.info("Updated subscription via web: %s", item_id)
         return RedirectResponse(
             url=f"/admin/billing/subscriptions/{item_id}?success=Subscription+updated+successfully",
@@ -233,6 +234,7 @@ async def delete_subscription(
 
     try:
         billing_service.subscriptions.delete(db, str(item_id))
+        db.commit()
         logger.info("Deleted subscription via web: %s", item_id)
         return RedirectResponse(
             url="/admin/billing/subscriptions?success=Subscription+deleted+successfully",

@@ -51,8 +51,10 @@ async def lifespan(app: FastAPI):  # type: ignore[arg-type]
     # ── Startup ──────────────────────────────────────────
     # Validate configuration
     warnings = validate_settings(settings)
-    for w in warnings:
-        logger.warning("Config warning: %s", w)
+    for warning in warnings:
+        if warning.critical:
+            raise RuntimeError(f"Critical configuration error: {warning.message}")
+        logger.warning("Config warning: %s", warning.message)
 
     # Seed default settings
     db = SessionLocal()
@@ -61,6 +63,7 @@ async def lifespan(app: FastAPI):  # type: ignore[arg-type]
         seed_audit_settings(db)
         seed_scheduler_settings(db)
         seed_billing_settings(db)
+        db.commit()
     finally:
         db.close()
 
@@ -104,6 +107,21 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(CSRFMiddleware)
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(ObservabilityMiddleware)
+
+
+@app.middleware("http")
+async def static_cache_middleware(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        cache_control = (
+            "public, max-age=31536000, immutable"
+            if "v" in request.query_params
+            else settings.static_cache_control
+        )
+        response.headers.setdefault("Cache-Control", cache_control)
+    return response
 
 
 @app.middleware("http")
@@ -248,7 +266,7 @@ def _include_api_router(router: object, dependencies: list[Any] | None = None) -
 
 
 from app.api.billing import router as billing_router  # noqa: E402
-from app.api.deps import require_role, require_user_auth  # noqa: E402
+from app.api.deps import require_role  # noqa: E402
 from app.api.file_uploads import router as file_uploads_router  # noqa: E402
 from app.api.notifications import router as notifications_router  # noqa: E402
 from app.api.ws import router as ws_router  # noqa: E402
@@ -285,14 +303,14 @@ from app.web.settings import router as web_settings_router  # noqa: E402
 
 _include_api_router(auth_router, dependencies=[Depends(require_role("admin"))])
 _include_api_router(auth_flow_router)
-_include_api_router(rbac_router, dependencies=[Depends(require_user_auth)])
-_include_api_router(people_router, dependencies=[Depends(require_user_auth)])
+_include_api_router(rbac_router, dependencies=[Depends(require_role("admin"))])
+_include_api_router(people_router, dependencies=[Depends(require_role("admin"))])
 _include_api_router(audit_router)
-_include_api_router(settings_router, dependencies=[Depends(require_user_auth)])
-_include_api_router(scheduler_router, dependencies=[Depends(require_user_auth)])
-_include_api_router(billing_router, dependencies=[Depends(require_user_auth)])
-_include_api_router(file_uploads_router, dependencies=[Depends(require_user_auth)])
-_include_api_router(notifications_router, dependencies=[Depends(require_user_auth)])
+_include_api_router(settings_router, dependencies=[Depends(require_role("admin"))])
+_include_api_router(scheduler_router, dependencies=[Depends(require_role("admin"))])
+_include_api_router(billing_router, dependencies=[Depends(require_role("admin"))])
+_include_api_router(file_uploads_router, dependencies=[Depends(require_role("admin"))])
+_include_api_router(notifications_router, dependencies=[Depends(require_role("admin"))])
 app.include_router(ws_router)
 app.include_router(web_auth_router)
 app.include_router(web_dashboard_router)

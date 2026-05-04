@@ -3,8 +3,6 @@
 import smtplib
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.services.email import (
     _env_bool,
     _env_int,
@@ -392,6 +390,31 @@ class TestSendPasswordResetEmail:
         assert captured_message is not None
         assert "my_reset_token" in captured_message
         assert "Reset" in captured_message or "reset" in captured_message
+
+    def test_send_password_reset_email_escapes_html(self, monkeypatch):
+        """Test password reset email escapes display names in HTML body."""
+        monkeypatch.setenv("APP_URL", "https://app.example.com")
+        monkeypatch.setenv("SMTP_USE_SSL", "false")
+
+        mock_smtp = MagicMock()
+        captured_message = None
+
+        def capture_sendmail(from_email, to_email, message):
+            nonlocal captured_message
+            captured_message = message
+
+        mock_smtp.sendmail.side_effect = capture_sendmail
+
+        with patch("app.services.email.smtplib.SMTP", return_value=mock_smtp):
+            send_password_reset_email(
+                None,
+                "user@example.com",
+                "my_reset_token",
+                '<img src=x onerror="alert(1)">',
+        )
+
+        assert captured_message is not None
+        assert "&lt;img" in captured_message
 
 
 class TestEmailLogging:

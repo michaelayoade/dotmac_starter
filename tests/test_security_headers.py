@@ -60,6 +60,15 @@ class TestSecurityHeaders:
         csp = resp.headers["Content-Security-Policy"]
         assert "'unsafe-eval'" not in csp
 
+    def test_no_unsafe_inline_in_script_src(self, client: TestClient) -> None:
+        resp = client.get("/test")
+        csp = resp.headers["Content-Security-Policy"]
+        script_src = next(
+            directive for directive in csp.split(";") if "script-src" in directive
+        )
+        assert "'unsafe-inline'" not in script_src
+        assert "'nonce-" in script_src
+
     def test_no_cdn_allowlist_in_csp(self, client: TestClient) -> None:
         resp = client.get("/test")
         csp = resp.headers["Content-Security-Policy"]

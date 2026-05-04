@@ -138,6 +138,7 @@ async def delete_payment_method(
 
     try:
         billing_service.payment_methods.delete(db, str(item_id))
+        db.commit()
         logger.info("Deleted payment method via web: %s", item_id)
         return RedirectResponse(
             url="/admin/billing/payment-methods?success=Payment+method+deleted+successfully",

@@ -5,6 +5,8 @@ Adds OWASP-recommended HTTP security headers to every response.
 
 from __future__ import annotations
 
+import secrets
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -14,6 +16,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Injects security headers into every HTTP response."""
 
     async def dispatch(self, request: Request, call_next: object) -> Response:
+        nonce = secrets.token_urlsafe(16)
+        request.state.csp_nonce = nonce
         response: Response = await call_next(request)  # type: ignore[call-arg]
 
         # Prevent MIME-sniffing
@@ -36,12 +40,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "camera=(), microphone=(), geolocation=(), payment=()",
         )
 
-        # Content Security Policy — restrictive but practical
+        # Content Security Policy - restrictive but practical
         response.headers.setdefault(
             "Content-Security-Policy",
             (
                 "default-src 'self'; "
-                "script-src 'self' 'unsafe-inline'; "
+                f"script-src 'self' 'nonce-{nonce}'; "
                 "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
                 "font-src 'self' https://fonts.gstatic.com; "
                 "img-src 'self' data: https:; "
