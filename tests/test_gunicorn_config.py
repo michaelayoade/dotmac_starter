@@ -1,4 +1,5 @@
 """Tests for gunicorn configuration."""
+
 from __future__ import annotations
 
 import importlib

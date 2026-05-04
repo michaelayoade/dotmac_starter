@@ -1,4 +1,5 @@
 """Tests for custom Jinja2 template filters."""
+
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
@@ -124,26 +125,31 @@ class TestTimeago:
 
     def test_minutes(self) -> None:
         from datetime import timedelta
+
         past = datetime.now(timezone.utc) - timedelta(minutes=5)
         assert _timeago(past) == "5m ago"
 
     def test_hours(self) -> None:
         from datetime import timedelta
+
         past = datetime.now(timezone.utc) - timedelta(hours=3)
         assert _timeago(past) == "3h ago"
 
     def test_days(self) -> None:
         from datetime import timedelta
+
         past = datetime.now(timezone.utc) - timedelta(days=7)
         assert _timeago(past) == "7d ago"
 
     def test_months(self) -> None:
         from datetime import timedelta
+
         past = datetime.now(timezone.utc) - timedelta(days=60)
         assert _timeago(past) == "2mo ago"
 
     def test_years(self) -> None:
         from datetime import timedelta
+
         past = datetime.now(timezone.utc) - timedelta(days=400)
         assert _timeago(past) == "1y ago"
 
@@ -152,6 +158,7 @@ class TestTimeago:
 
     def test_naive_datetime_treated_as_utc(self) -> None:
         from datetime import timedelta
+
         past = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=2)
         result = _timeago(past)
         assert "h ago" in result

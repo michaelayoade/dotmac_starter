@@ -1,4 +1,5 @@
 """Tests for configuration validation and health checks."""
+
 from __future__ import annotations
 
 import os
@@ -20,7 +21,9 @@ def _real_validate_settings(s: object) -> list[str]:
     if not jwt_secret:
         warnings.append("JWT_SECRET is not set — authentication will not work")
     elif len(jwt_secret) < 32 and not jwt_secret.startswith("openbao://"):
-        warnings.append("JWT_SECRET is shorter than 32 characters — consider a stronger secret")
+        warnings.append(
+            "JWT_SECRET is shorter than 32 characters — consider a stronger secret"
+        )
 
     if not totp_key:
         warnings.append("TOTP_ENCRYPTION_KEY is not set — MFA will not work")
@@ -47,7 +50,9 @@ class TestValidateSettings:
 
     def test_short_jwt_secret(self) -> None:
         s = _FakeSettings()
-        with patch.dict(os.environ, {"JWT_SECRET": "short", "TOTP_ENCRYPTION_KEY": "x"}, clear=False):
+        with patch.dict(
+            os.environ, {"JWT_SECRET": "short", "TOTP_ENCRYPTION_KEY": "x"}, clear=False
+        ):
             warnings = _real_validate_settings(s)
         assert any("shorter than 32" in w for w in warnings)
 

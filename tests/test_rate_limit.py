@@ -1,4 +1,5 @@
 """Tests for RateLimitMiddleware."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -104,6 +105,7 @@ class TestRateLimitMiddleware:
 class TestRateLimitPaths:
     def test_login_path_configured(self) -> None:
         from app.middleware.rate_limit import _RATE_LIMIT_PATHS
+
         assert "/auth/login" in _RATE_LIMIT_PATHS
         max_req, window = _RATE_LIMIT_PATHS["/auth/login"]
         assert max_req == 10
@@ -111,6 +113,7 @@ class TestRateLimitPaths:
 
     def test_password_reset_path_configured(self) -> None:
         from app.middleware.rate_limit import _RATE_LIMIT_PATHS
+
         assert "/auth/password-reset" in _RATE_LIMIT_PATHS
         max_req, window = _RATE_LIMIT_PATHS["/auth/password-reset"]
         assert max_req == 5
@@ -118,8 +121,10 @@ class TestRateLimitPaths:
 
     def test_mfa_verify_path_configured(self) -> None:
         from app.middleware.rate_limit import _RATE_LIMIT_PATHS
+
         assert "/auth/mfa/verify" in _RATE_LIMIT_PATHS
 
     def test_register_path_configured(self) -> None:
         from app.middleware.rate_limit import _RATE_LIMIT_PATHS
+
         assert "/auth/register" in _RATE_LIMIT_PATHS

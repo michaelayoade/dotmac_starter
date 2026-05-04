@@ -1,4 +1,5 @@
 """Tests for notification API endpoints."""
+
 import uuid
 
 import pytest
@@ -14,9 +15,7 @@ class TestNotificationAPI:
             "message": "Test message",
             "type": "info",
         }
-        response = client.post(
-            "/notifications", json=payload, headers=auth_headers
-        )
+        response = client.post("/notifications", json=payload, headers=auth_headers)
         assert response.status_code == 201
         data = response.json()
         assert data["title"] == "API Test"
@@ -39,11 +38,13 @@ class TestNotificationAPI:
 
     def test_get_unread_count(self, client, auth_headers, db_session, person):
         for i in range(2):
-            db_session.add(Notification(
-                recipient_id=person.id,
-                title=f"Unread {i}",
-                type=NotificationType.info,
-            ))
+            db_session.add(
+                Notification(
+                    recipient_id=person.id,
+                    title=f"Unread {i}",
+                    type=NotificationType.info,
+                )
+            )
         db_session.commit()
 
         response = client.get("/notifications/me/unread-count", headers=auth_headers)
@@ -61,9 +62,7 @@ class TestNotificationAPI:
         db_session.commit()
         db_session.refresh(n)
 
-        response = client.post(
-            f"/notifications/me/{n.id}/read", headers=auth_headers
-        )
+        response = client.post(f"/notifications/me/{n.id}/read", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
         assert data["is_read"] is True
@@ -76,11 +75,13 @@ class TestNotificationAPI:
 
     def test_mark_all_read(self, client, auth_headers, db_session, person):
         for i in range(3):
-            db_session.add(Notification(
-                recipient_id=person.id,
-                title=f"All Read {i}",
-                type=NotificationType.info,
-            ))
+            db_session.add(
+                Notification(
+                    recipient_id=person.id,
+                    title=f"All Read {i}",
+                    type=NotificationType.info,
+                )
+            )
         db_session.commit()
 
         response = client.post("/notifications/me/read-all", headers=auth_headers)

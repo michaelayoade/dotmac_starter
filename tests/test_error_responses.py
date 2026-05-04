@@ -1,4 +1,5 @@
 """Tests for structured error responses with request_id."""
+
 from __future__ import annotations
 
 import pytest
@@ -27,7 +28,11 @@ def app_with_errors() -> FastAPI:
     def http_error_dict():
         raise HTTPException(
             status_code=400,
-            detail={"code": "invalid_input", "message": "Bad field", "details": {"field": "name"}},
+            detail={
+                "code": "invalid_input",
+                "message": "Bad field",
+                "details": {"field": "name"},
+            },
         )
 
     @app.get("/crash")

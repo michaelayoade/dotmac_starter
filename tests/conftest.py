@@ -45,14 +45,14 @@ class TimestampMixin:
 
 
 # Create a mock db module
-mock_db_module = ModuleType('app.db')
+mock_db_module = ModuleType("app.db")
 mock_db_module.Base = TestBase
 mock_db_module.TimestampMixin = TimestampMixin
 mock_db_module.SessionLocal = _TestSessionLocal
 mock_db_module.get_engine = lambda: _test_engine
 
 # Also mock app.config to prevent .env loading
-mock_config_module = ModuleType('app.config')
+mock_config_module = ModuleType("app.config")
 
 
 class MockSettings:
@@ -80,7 +80,9 @@ class MockSettings:
     s3_secret_key = ""
     s3_endpoint_url = ""
     upload_max_size_bytes = 10 * 1024 * 1024
-    upload_allowed_types = "image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/csv"
+    upload_allowed_types = (
+        "image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/csv"
+    )
     metrics_token = None
 
 
@@ -89,8 +91,8 @@ mock_config_module.Settings = MockSettings
 mock_config_module.validate_settings = lambda s: []
 
 # Insert mocks before any app imports
-sys.modules['app.config'] = mock_config_module
-sys.modules['app.db'] = mock_db_module
+sys.modules["app.config"] = mock_config_module
+sys.modules["app.db"] = mock_db_module
 
 # Set environment variables
 os.environ["JWT_SECRET"] = "test-secret"
@@ -209,7 +211,9 @@ def client(db_session):
     app.dependency_overrides.clear()
 
 
-def _create_access_token(person_id: str, session_id: str, roles: list[str] = None, scopes: list[str] = None) -> str:
+def _create_access_token(
+    person_id: str, session_id: str, roles: list[str] = None, scopes: list[str] = None
+) -> str:
     """Create a JWT access token for testing."""
     secret = os.getenv("JWT_SECRET", "test-secret")
     algorithm = os.getenv("JWT_ALGORITHM", "HS256")
@@ -417,7 +421,9 @@ def scheduled_task(db_session):
 @pytest.fixture()
 def billing_product(db_session):
     """Create a test billing product."""
-    product = Product(name=f"Product {uuid.uuid4().hex[:8]}", description="Test product")
+    product = Product(
+        name=f"Product {uuid.uuid4().hex[:8]}", description="Test product"
+    )
     db_session.add(product)
     db_session.commit()
     db_session.refresh(product)

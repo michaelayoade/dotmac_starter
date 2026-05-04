@@ -1,4 +1,5 @@
 """Tests for web CRUD admin pages."""
+
 import uuid
 
 import pytest

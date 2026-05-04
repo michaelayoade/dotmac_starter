@@ -241,7 +241,9 @@ class TestRequireAuditAuthWithApiKey:
 class TestSessionExpiry:
     """Tests for session expiry edge cases."""
 
-    def test_expired_session_token_via_hash_lookup_returns_401(self, db_session, person):
+    def test_expired_session_token_via_hash_lookup_returns_401(
+        self, db_session, person
+    ):
         """Test that expired session via hash lookup returns 401."""
         from app.services.auth_flow import hash_session_token
 
