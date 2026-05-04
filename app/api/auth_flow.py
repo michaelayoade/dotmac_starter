@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
@@ -71,9 +72,15 @@ router = APIRouter(prefix="/auth", tags=["auth"])
     },
 )
 def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
-    return auth_flow_service.auth_flow.login_response(
-        db, payload.username, payload.password, request, payload.provider
-    )
+    try:
+        response = auth_flow_service.auth_flow.login_response(
+            db, payload.username, payload.password, request, payload.provider
+        )
+    except HTTPException:
+        db.commit()
+        raise
+    db.commit()
+    return response
 
 
 @router.post(
@@ -92,7 +99,11 @@ def mfa_setup(
 ):
     if str(payload.person_id) != auth["person_id"]:
         raise HTTPException(status_code=403, detail="Forbidden")
-    return auth_flow_service.auth_flow.mfa_setup(db, auth["person_id"], payload.label)
+    response = auth_flow_service.auth_flow.mfa_setup(
+        db, auth["person_id"], payload.label
+    )
+    db.commit()
+    return response
 
 
 @router.post(
@@ -146,9 +157,15 @@ def mfa_verify(
     },
 )
 def refresh(payload: RefreshRequest, request: Request, db: Session = Depends(get_db)):
-    return auth_flow_service.auth_flow.refresh_response(
-        db, payload.refresh_token, request
-    )
+    try:
+        response = auth_flow_service.auth_flow.refresh_response(
+            db, payload.refresh_token, request
+        )
+    except HTTPException:
+        db.commit()
+        raise
+    db.commit()
+    return response
 
 
 @router.post(
@@ -160,9 +177,11 @@ def refresh(payload: RefreshRequest, request: Request, db: Session = Depends(get
     },
 )
 def logout(payload: LogoutRequest, request: Request, db: Session = Depends(get_db)):
-    return auth_flow_service.auth_flow.logout_response(
+    response = auth_flow_service.auth_flow.logout_response(
         db, payload.refresh_token, request
     )
+    db.commit()
+    return response
 
 
 @router.get(
@@ -311,14 +330,13 @@ def list_sessions(
     db: Session = Depends(get_db),
 ):
     person_id = coerce_uuid(auth["person_id"])
-    sessions = (
-        db.query(AuthSession)
-        .filter(AuthSession.person_id == person_id)
-        .filter(AuthSession.status == SessionStatus.active)
-        .filter(AuthSession.revoked_at.is_(None))
+    sessions = db.scalars(
+        select(AuthSession)
+        .where(AuthSession.person_id == person_id)
+        .where(AuthSession.status == SessionStatus.active)
+        .where(AuthSession.revoked_at.is_(None))
         .order_by(AuthSession.created_at.desc())
-        .all()
-    )
+    ).all()
 
     current_session_id = auth.get("session_id")
 
@@ -354,12 +372,12 @@ def revoke_session(
     auth: dict = Depends(require_user_auth),
     db: Session = Depends(get_db),
 ):
-    session = (
-        db.query(AuthSession)
-        .filter(AuthSession.id == coerce_uuid(session_id))
-        .filter(AuthSession.person_id == coerce_uuid(auth["person_id"]))
-        .first()
-    )
+    session = db.scalars(
+        select(AuthSession)
+        .where(AuthSession.id == coerce_uuid(session_id))
+        .where(AuthSession.person_id == coerce_uuid(auth["person_id"]))
+        .limit(1)
+    ).first()
 
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -391,14 +409,13 @@ def revoke_all_other_sessions(
     if current_session_id:
         current_session_id = coerce_uuid(current_session_id)
 
-    sessions = (
-        db.query(AuthSession)
-        .filter(AuthSession.person_id == coerce_uuid(auth["person_id"]))
-        .filter(AuthSession.status == SessionStatus.active)
-        .filter(AuthSession.revoked_at.is_(None))
-        .filter(AuthSession.id != current_session_id)
-        .all()
-    )
+    sessions = db.scalars(
+        select(AuthSession)
+        .where(AuthSession.person_id == coerce_uuid(auth["person_id"]))
+        .where(AuthSession.status == SessionStatus.active)
+        .where(AuthSession.revoked_at.is_(None))
+        .where(AuthSession.id != current_session_id)
+    ).all()
 
     now = datetime.now(UTC)
     for session in sessions:
@@ -425,12 +442,12 @@ def change_password(
     auth: dict = Depends(require_user_auth),
     db: Session = Depends(get_db),
 ):
-    credential = (
-        db.query(UserCredential)
-        .filter(UserCredential.person_id == coerce_uuid(auth["person_id"]))
-        .filter(UserCredential.is_active.is_(True))
-        .first()
-    )
+    credential = db.scalars(
+        select(UserCredential)
+        .where(UserCredential.person_id == coerce_uuid(auth["person_id"]))
+        .where(UserCredential.is_active.is_(True))
+        .limit(1)
+    ).first()
 
     if not credential:
         raise HTTPException(status_code=404, detail="No credentials found")
@@ -494,4 +511,5 @@ def reset_password_endpoint(
     Reset password using the token from forgot-password email.
     """
     reset_at = reset_password(db, payload.token, payload.new_password)
+    db.commit()
     return ResetPasswordResponse(reset_at=reset_at)
