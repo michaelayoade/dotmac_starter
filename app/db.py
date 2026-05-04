@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, create_engine
+from sqlalchemy import DateTime, create_engine, event
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 from app.config import settings
@@ -34,7 +35,7 @@ class TimestampMixin:
 
 
 def get_engine():
-    return create_engine(
+    engine = create_engine(
         settings.database_url,
         pool_pre_ping=True,
         pool_size=settings.db_pool_size,
@@ -42,6 +43,29 @@ def get_engine():
         pool_timeout=settings.db_pool_timeout,
         pool_recycle=settings.db_pool_recycle,
     )
+    _configure_statement_timeout(engine)
+    return engine
+
+
+def _configure_statement_timeout(engine: Engine) -> None:
+    if not settings.database_url.startswith("postgresql"):
+        return
+    timeout_ms = max(settings.db_statement_timeout_ms, 0)
+    if timeout_ms == 0:
+        return
+
+    @event.listens_for(engine, "connect")
+    def _set_statement_timeout(dbapi_connection, _connection_record) -> None:
+        with dbapi_connection.cursor() as cursor:
+            cursor.execute("SET statement_timeout = %s", (timeout_ms,))
 
 
 SessionLocal = sessionmaker(bind=get_engine(), autoflush=False, autocommit=False)
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

@@ -1,4 +1,4 @@
-from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.person import Person
@@ -14,6 +14,7 @@ from app.schemas.rbac import (
     RoleUpdate,
 )
 from app.services.common import coerce_uuid
+from app.services.exceptions import NotFoundError
 from app.services.query_utils import apply_ordering, apply_pagination
 from app.services.response import ListResponseMixin
 
@@ -23,7 +24,7 @@ class Roles(ListResponseMixin):
     def create(db: Session, payload: RoleCreate):
         role = Role(**payload.model_dump())
         db.add(role)
-        db.commit()
+        db.flush()
         db.refresh(role)
         return role
 
@@ -31,7 +32,7 @@ class Roles(ListResponseMixin):
     def get(db: Session, role_id: str):
         role = db.get(Role, coerce_uuid(role_id))
         if not role:
-            raise HTTPException(status_code=404, detail="Role not found")
+            raise NotFoundError("Role not found")
         return role
 
     @staticmethod
@@ -43,27 +44,27 @@ class Roles(ListResponseMixin):
         limit: int,
         offset: int,
     ):
-        query = db.query(Role)
+        query = select(Role)
         if is_active is None:
-            query = query.filter(Role.is_active.is_(True))
+            query = query.where(Role.is_active.is_(True))
         else:
-            query = query.filter(Role.is_active == is_active)
+            query = query.where(Role.is_active == is_active)
         query = apply_ordering(
             query,
             order_by,
             order_dir,
             {"created_at": Role.created_at, "name": Role.name},
         )
-        return apply_pagination(query, limit, offset).all()
+        return list(db.scalars(apply_pagination(query, limit, offset)).all())
 
     @staticmethod
     def update(db: Session, role_id: str, payload: RoleUpdate):
         role = db.get(Role, coerce_uuid(role_id))
         if not role:
-            raise HTTPException(status_code=404, detail="Role not found")
+            raise NotFoundError("Role not found")
         for key, value in payload.model_dump(exclude_unset=True).items():
             setattr(role, key, value)
-        db.commit()
+        db.flush()
         db.refresh(role)
         return role
 
@@ -71,9 +72,9 @@ class Roles(ListResponseMixin):
     def delete(db: Session, role_id: str):
         role = db.get(Role, coerce_uuid(role_id))
         if not role:
-            raise HTTPException(status_code=404, detail="Role not found")
+            raise NotFoundError("Role not found")
         role.is_active = False
-        db.commit()
+        db.flush()
 
 
 class Permissions(ListResponseMixin):
@@ -81,7 +82,7 @@ class Permissions(ListResponseMixin):
     def create(db: Session, payload: PermissionCreate):
         permission = Permission(**payload.model_dump())
         db.add(permission)
-        db.commit()
+        db.flush()
         db.refresh(permission)
         return permission
 
@@ -89,7 +90,7 @@ class Permissions(ListResponseMixin):
     def get(db: Session, permission_id: str):
         permission = db.get(Permission, coerce_uuid(permission_id))
         if not permission:
-            raise HTTPException(status_code=404, detail="Permission not found")
+            raise NotFoundError("Permission not found")
         return permission
 
     @staticmethod
@@ -101,27 +102,27 @@ class Permissions(ListResponseMixin):
         limit: int,
         offset: int,
     ):
-        query = db.query(Permission)
+        query = select(Permission)
         if is_active is None:
-            query = query.filter(Permission.is_active.is_(True))
+            query = query.where(Permission.is_active.is_(True))
         else:
-            query = query.filter(Permission.is_active == is_active)
+            query = query.where(Permission.is_active == is_active)
         query = apply_ordering(
             query,
             order_by,
             order_dir,
             {"created_at": Permission.created_at, "key": Permission.key},
         )
-        return apply_pagination(query, limit, offset).all()
+        return list(db.scalars(apply_pagination(query, limit, offset)).all())
 
     @staticmethod
     def update(db: Session, permission_id: str, payload: PermissionUpdate):
         permission = db.get(Permission, coerce_uuid(permission_id))
         if not permission:
-            raise HTTPException(status_code=404, detail="Permission not found")
+            raise NotFoundError("Permission not found")
         for key, value in payload.model_dump(exclude_unset=True).items():
             setattr(permission, key, value)
-        db.commit()
+        db.flush()
         db.refresh(permission)
         return permission
 
@@ -129,9 +130,9 @@ class Permissions(ListResponseMixin):
     def delete(db: Session, permission_id: str):
         permission = db.get(Permission, coerce_uuid(permission_id))
         if not permission:
-            raise HTTPException(status_code=404, detail="Permission not found")
+            raise NotFoundError("Permission not found")
         permission.is_active = False
-        db.commit()
+        db.flush()
 
 
 class RolePermissions(ListResponseMixin):
@@ -139,13 +140,13 @@ class RolePermissions(ListResponseMixin):
     def create(db: Session, payload: RolePermissionCreate):
         role = db.get(Role, coerce_uuid(payload.role_id))
         if not role:
-            raise HTTPException(status_code=404, detail="Role not found")
+            raise NotFoundError("Role not found")
         permission = db.get(Permission, coerce_uuid(payload.permission_id))
         if not permission:
-            raise HTTPException(status_code=404, detail="Permission not found")
+            raise NotFoundError("Permission not found")
         link = RolePermission(**payload.model_dump())
         db.add(link)
-        db.commit()
+        db.flush()
         db.refresh(link)
         return link
 
@@ -153,7 +154,7 @@ class RolePermissions(ListResponseMixin):
     def get(db: Session, link_id: str):
         link = db.get(RolePermission, coerce_uuid(link_id))
         if not link:
-            raise HTTPException(status_code=404, detail="Role permission not found")
+            raise NotFoundError("Role permission not found")
         return link
 
     @staticmethod
@@ -166,11 +167,11 @@ class RolePermissions(ListResponseMixin):
         limit: int,
         offset: int,
     ):
-        query = db.query(RolePermission)
+        query = select(RolePermission)
         if role_id:
-            query = query.filter(RolePermission.role_id == coerce_uuid(role_id))
+            query = query.where(RolePermission.role_id == coerce_uuid(role_id))
         if permission_id:
-            query = query.filter(
+            query = query.where(
                 RolePermission.permission_id == coerce_uuid(permission_id)
             )
         query = apply_ordering(
@@ -179,25 +180,25 @@ class RolePermissions(ListResponseMixin):
             order_dir,
             {"role_id": RolePermission.role_id},
         )
-        return apply_pagination(query, limit, offset).all()
+        return list(db.scalars(apply_pagination(query, limit, offset)).all())
 
     @staticmethod
     def update(db: Session, link_id: str, payload: RolePermissionUpdate):
         link = db.get(RolePermission, coerce_uuid(link_id))
         if not link:
-            raise HTTPException(status_code=404, detail="Role permission not found")
+            raise NotFoundError("Role permission not found")
         data = payload.model_dump(exclude_unset=True)
         if "role_id" in data:
             role = db.get(Role, data["role_id"])
             if not role:
-                raise HTTPException(status_code=404, detail="Role not found")
+                raise NotFoundError("Role not found")
         if "permission_id" in data:
             permission = db.get(Permission, data["permission_id"])
             if not permission:
-                raise HTTPException(status_code=404, detail="Permission not found")
+                raise NotFoundError("Permission not found")
         for key, value in data.items():
             setattr(link, key, value)
-        db.commit()
+        db.flush()
         db.refresh(link)
         return link
 
@@ -205,9 +206,9 @@ class RolePermissions(ListResponseMixin):
     def delete(db: Session, link_id: str):
         link = db.get(RolePermission, coerce_uuid(link_id))
         if not link:
-            raise HTTPException(status_code=404, detail="Role permission not found")
+            raise NotFoundError("Role permission not found")
         db.delete(link)
-        db.commit()
+        db.flush()
 
 
 class PersonRoles(ListResponseMixin):
@@ -215,13 +216,13 @@ class PersonRoles(ListResponseMixin):
     def create(db: Session, payload: PersonRoleCreate):
         person = db.get(Person, coerce_uuid(payload.person_id))
         if not person:
-            raise HTTPException(status_code=404, detail="Person not found")
+            raise NotFoundError("Person not found")
         role = db.get(Role, coerce_uuid(payload.role_id))
         if not role:
-            raise HTTPException(status_code=404, detail="Role not found")
+            raise NotFoundError("Role not found")
         link = PersonRole(**payload.model_dump())
         db.add(link)
-        db.commit()
+        db.flush()
         db.refresh(link)
         return link
 
@@ -229,7 +230,7 @@ class PersonRoles(ListResponseMixin):
     def get(db: Session, link_id: str):
         link = db.get(PersonRole, coerce_uuid(link_id))
         if not link:
-            raise HTTPException(status_code=404, detail="Person role not found")
+            raise NotFoundError("Person role not found")
         return link
 
     @staticmethod
@@ -242,36 +243,36 @@ class PersonRoles(ListResponseMixin):
         limit: int,
         offset: int,
     ):
-        query = db.query(PersonRole)
+        query = select(PersonRole)
         if person_id:
-            query = query.filter(PersonRole.person_id == coerce_uuid(person_id))
+            query = query.where(PersonRole.person_id == coerce_uuid(person_id))
         if role_id:
-            query = query.filter(PersonRole.role_id == coerce_uuid(role_id))
+            query = query.where(PersonRole.role_id == coerce_uuid(role_id))
         query = apply_ordering(
             query,
             order_by,
             order_dir,
             {"assigned_at": PersonRole.assigned_at},
         )
-        return apply_pagination(query, limit, offset).all()
+        return list(db.scalars(apply_pagination(query, limit, offset)).all())
 
     @staticmethod
     def update(db: Session, link_id: str, payload: PersonRoleUpdate):
         link = db.get(PersonRole, coerce_uuid(link_id))
         if not link:
-            raise HTTPException(status_code=404, detail="Person role not found")
+            raise NotFoundError("Person role not found")
         data = payload.model_dump(exclude_unset=True)
         if "person_id" in data:
             person = db.get(Person, data["person_id"])
             if not person:
-                raise HTTPException(status_code=404, detail="Person not found")
+                raise NotFoundError("Person not found")
         if "role_id" in data:
             role = db.get(Role, data["role_id"])
             if not role:
-                raise HTTPException(status_code=404, detail="Role not found")
+                raise NotFoundError("Role not found")
         for key, value in data.items():
             setattr(link, key, value)
-        db.commit()
+        db.flush()
         db.refresh(link)
         return link
 
@@ -279,9 +280,9 @@ class PersonRoles(ListResponseMixin):
     def delete(db: Session, link_id: str):
         link = db.get(PersonRole, coerce_uuid(link_id))
         if not link:
-            raise HTTPException(status_code=404, detail="Person role not found")
+            raise NotFoundError("Person role not found")
         db.delete(link)
-        db.commit()
+        db.flush()
 
 
 roles = Roles()

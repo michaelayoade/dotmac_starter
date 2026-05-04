@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
@@ -20,8 +20,33 @@ from app.schemas.auth import (
 )
 from app.schemas.common import ListResponse
 from app.services import auth as auth_service
+from app.services.exceptions import (
+    ConflictError,
+    NotFoundError,
+    RateLimitError,
+    ServiceUnavailableError,
+)
 
 router = APIRouter()
+
+
+def _to_http_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, NotFoundError):
+        return HTTPException(status_code=404, detail=str(exc))
+    if isinstance(exc, ConflictError):
+        return HTTPException(status_code=409, detail=str(exc))
+    if isinstance(exc, RateLimitError):
+        return HTTPException(status_code=429, detail=str(exc))
+    if isinstance(exc, ServiceUnavailableError):
+        return HTTPException(status_code=503, detail=str(exc))
+    return HTTPException(status_code=400, detail=str(exc))
+
+
+def _commit_result(db: Session, result):
+    db.commit()
+    if result is not None:
+        db.refresh(result)
+    return result
 
 
 @router.post(
@@ -33,7 +58,10 @@ router = APIRouter()
 def create_user_credential(
     payload: UserCredentialCreate, db: Session = Depends(get_db)
 ):
-    return auth_service.user_credentials.create(db, payload)
+    try:
+        return _commit_result(db, auth_service.user_credentials.create(db, payload))
+    except (NotFoundError, ServiceUnavailableError) as exc:
+        raise _to_http_error(exc) from exc
 
 
 @router.get(
@@ -42,7 +70,10 @@ def create_user_credential(
     tags=["user-credentials"],
 )
 def get_user_credential(credential_id: str, db: Session = Depends(get_db)):
-    return auth_service.user_credentials.get(db, credential_id)
+    try:
+        return auth_service.user_credentials.get(db, credential_id)
+    except NotFoundError as exc:
+        raise _to_http_error(exc) from exc
 
 
 @router.get(
@@ -73,7 +104,12 @@ def list_user_credentials(
 def update_user_credential(
     credential_id: str, payload: UserCredentialUpdate, db: Session = Depends(get_db)
 ):
-    return auth_service.user_credentials.update(db, credential_id, payload)
+    try:
+        return _commit_result(
+            db, auth_service.user_credentials.update(db, credential_id, payload)
+        )
+    except NotFoundError as exc:
+        raise _to_http_error(exc) from exc
 
 
 @router.delete(
@@ -82,7 +118,11 @@ def update_user_credential(
     tags=["user-credentials"],
 )
 def delete_user_credential(credential_id: str, db: Session = Depends(get_db)):
-    auth_service.user_credentials.delete(db, credential_id)
+    try:
+        auth_service.user_credentials.delete(db, credential_id)
+    except NotFoundError as exc:
+        raise _to_http_error(exc) from exc
+    db.commit()
 
 
 @router.post(
@@ -92,7 +132,10 @@ def delete_user_credential(credential_id: str, db: Session = Depends(get_db)):
     tags=["mfa-methods"],
 )
 def create_mfa_method(payload: MFAMethodCreate, db: Session = Depends(get_db)):
-    return auth_service.mfa_methods.create(db, payload)
+    try:
+        return _commit_result(db, auth_service.mfa_methods.create(db, payload))
+    except (NotFoundError, ConflictError) as exc:
+        raise _to_http_error(exc) from exc
 
 
 @router.get(
@@ -101,7 +144,10 @@ def create_mfa_method(payload: MFAMethodCreate, db: Session = Depends(get_db)):
     tags=["mfa-methods"],
 )
 def get_mfa_method(method_id: str, db: Session = Depends(get_db)):
-    return auth_service.mfa_methods.get(db, method_id)
+    try:
+        return auth_service.mfa_methods.get(db, method_id)
+    except NotFoundError as exc:
+        raise _to_http_error(exc) from exc
 
 
 @router.get(
@@ -143,7 +189,12 @@ def list_mfa_methods(
 def update_mfa_method(
     method_id: str, payload: MFAMethodUpdate, db: Session = Depends(get_db)
 ):
-    return auth_service.mfa_methods.update(db, method_id, payload)
+    try:
+        return _commit_result(
+            db, auth_service.mfa_methods.update(db, method_id, payload)
+        )
+    except (NotFoundError, ConflictError) as exc:
+        raise _to_http_error(exc) from exc
 
 
 @router.delete(
@@ -152,7 +203,11 @@ def update_mfa_method(
     tags=["mfa-methods"],
 )
 def delete_mfa_method(method_id: str, db: Session = Depends(get_db)):
-    auth_service.mfa_methods.delete(db, method_id)
+    try:
+        auth_service.mfa_methods.delete(db, method_id)
+    except NotFoundError as exc:
+        raise _to_http_error(exc) from exc
+    db.commit()
 
 
 @router.post(
@@ -162,7 +217,10 @@ def delete_mfa_method(method_id: str, db: Session = Depends(get_db)):
     tags=["sessions"],
 )
 def create_session(payload: SessionCreate, db: Session = Depends(get_db)):
-    return auth_service.sessions.create(db, payload)
+    try:
+        return _commit_result(db, auth_service.sessions.create(db, payload))
+    except NotFoundError as exc:
+        raise _to_http_error(exc) from exc
 
 
 @router.get(
@@ -171,7 +229,10 @@ def create_session(payload: SessionCreate, db: Session = Depends(get_db)):
     tags=["sessions"],
 )
 def get_session(session_id: str, db: Session = Depends(get_db)):
-    return auth_service.sessions.get(db, session_id)
+    try:
+        return auth_service.sessions.get(db, session_id)
+    except NotFoundError as exc:
+        raise _to_http_error(exc) from exc
 
 
 @router.get(
@@ -201,7 +262,10 @@ def list_sessions(
 def update_session(
     session_id: str, payload: SessionUpdate, db: Session = Depends(get_db)
 ):
-    return auth_service.sessions.update(db, session_id, payload)
+    try:
+        return _commit_result(db, auth_service.sessions.update(db, session_id, payload))
+    except NotFoundError as exc:
+        raise _to_http_error(exc) from exc
 
 
 @router.delete(
@@ -210,7 +274,11 @@ def update_session(
     tags=["sessions"],
 )
 def delete_session(session_id: str, db: Session = Depends(get_db)):
-    auth_service.sessions.delete(db, session_id)
+    try:
+        auth_service.sessions.delete(db, session_id)
+    except NotFoundError as exc:
+        raise _to_http_error(exc) from exc
+    db.commit()
 
 
 @router.post(
@@ -220,7 +288,10 @@ def delete_session(session_id: str, db: Session = Depends(get_db)):
     tags=["api-keys"],
 )
 def create_api_key(payload: ApiKeyCreate, db: Session = Depends(get_db)):
-    return auth_service.api_keys.create(db, payload)
+    try:
+        return _commit_result(db, auth_service.api_keys.create(db, payload))
+    except (NotFoundError, ServiceUnavailableError) as exc:
+        raise _to_http_error(exc) from exc
 
 
 @router.post(
@@ -234,7 +305,17 @@ def generate_api_key(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    return auth_service.api_keys.generate_with_rate_limit(db, payload, request)
+    try:
+        result = auth_service.api_keys.generate_with_rate_limit(db, payload, request)
+    except (
+        NotFoundError,
+        RateLimitError,
+        ServiceUnavailableError,
+    ) as exc:
+        raise _to_http_error(exc) from exc
+    db.commit()
+    db.refresh(result["api_key"])
+    return result
 
 
 @router.get(
@@ -243,7 +324,10 @@ def generate_api_key(
     tags=["api-keys"],
 )
 def get_api_key(key_id: str, db: Session = Depends(get_db)):
-    return auth_service.api_keys.get(db, key_id)
+    try:
+        return auth_service.api_keys.get(db, key_id)
+    except NotFoundError as exc:
+        raise _to_http_error(exc) from exc
 
 
 @router.get(
@@ -271,7 +355,10 @@ def list_api_keys(
     tags=["api-keys"],
 )
 def update_api_key(key_id: str, payload: ApiKeyUpdate, db: Session = Depends(get_db)):
-    return auth_service.api_keys.update(db, key_id, payload)
+    try:
+        return _commit_result(db, auth_service.api_keys.update(db, key_id, payload))
+    except (NotFoundError, ServiceUnavailableError) as exc:
+        raise _to_http_error(exc) from exc
 
 
 @router.delete(
@@ -280,4 +367,8 @@ def update_api_key(key_id: str, payload: ApiKeyUpdate, db: Session = Depends(get
     tags=["api-keys"],
 )
 def delete_api_key(key_id: str, db: Session = Depends(get_db)):
-    auth_service.api_keys.revoke(db, key_id)
+    try:
+        auth_service.api_keys.revoke(db, key_id)
+    except NotFoundError as exc:
+        raise _to_http_error(exc) from exc
+    db.commit()

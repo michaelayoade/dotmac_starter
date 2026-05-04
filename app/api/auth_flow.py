@@ -110,9 +110,12 @@ def mfa_confirm(
     auth: dict = Depends(require_user_auth),
     db: Session = Depends(get_db),
 ):
-    return auth_flow_service.auth_flow.mfa_confirm(
+    method = auth_flow_service.auth_flow.mfa_confirm(
         db, str(payload.method_id), payload.code, auth["person_id"]
     )
+    db.commit()
+    db.refresh(method)
+    return method
 
 
 @router.post(
@@ -127,9 +130,11 @@ def mfa_confirm(
 def mfa_verify(
     payload: MfaVerifyRequest, request: Request, db: Session = Depends(get_db)
 ):
-    return auth_flow_service.auth_flow.mfa_verify_response(
+    response = auth_flow_service.auth_flow.mfa_verify_response(
         db, payload.mfa_token, payload.code, request
     )
+    db.commit()
+    return response
 
 
 @router.post(

@@ -134,6 +134,7 @@ async def create_role_submit(
             )
             role_permissions.create(db, rp_payload)
 
+        db.commit()
         logger.info("Created role via web: %s", payload.name)
         return RedirectResponse(
             url="/admin/roles?success=Role+created+successfully",
@@ -274,6 +275,7 @@ async def delete_role(
 
     try:
         roles.delete(db, str(role_id))
+        db.commit()
         logger.info("Deleted role via web: %s", role_id)
         return RedirectResponse(
             url="/admin/roles?success=Role+deleted+successfully",

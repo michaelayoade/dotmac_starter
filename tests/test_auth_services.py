@@ -1,7 +1,6 @@
 import hashlib
 
 import pytest
-from fastapi import HTTPException
 
 from app.models.auth import SessionStatus
 from app.schemas.auth import (
@@ -12,6 +11,7 @@ from app.schemas.auth import (
 )
 from app.services import auth as auth_service
 from app.services.auth_flow import hash_password
+from app.services.exceptions import ServiceUnavailableError
 
 
 class _FakeRedis:
@@ -119,13 +119,14 @@ def test_api_key_generate_with_redis(monkeypatch, db_session):
     result = auth_service.api_keys.generate_with_rate_limit(db_session, payload, None)
     raw_key = result["key"]
     api_key = result["api_key"]
-    assert hashlib.sha256(raw_key.encode("utf-8")).hexdigest() == api_key.key_hash
+    assert auth_service.hash_api_key(raw_key) == api_key.key_hash
+    assert hashlib.sha256(raw_key.encode("utf-8")).hexdigest() != api_key.key_hash
 
 
 def test_api_key_rate_limit_requires_redis(monkeypatch, db_session):
     monkeypatch.setattr(auth_service, "_get_redis_client", lambda: None)
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(ServiceUnavailableError) as exc:
         auth_service.api_keys.generate_with_rate_limit(
             db_session, ApiKeyGenerateRequest(label="test"), None
         )
-    assert exc.value.status_code == 503
+    assert str(exc.value) == "Rate limiting unavailable (Redis required)"

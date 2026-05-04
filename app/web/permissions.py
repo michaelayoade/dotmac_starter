@@ -116,6 +116,7 @@ async def create_permission_submit(
             is_active=data.get("is_active") == "on",
         )
         permissions.create(db, payload)
+        db.commit()
         logger.info("Created permission via web: %s", payload.key)
         return RedirectResponse(
             url="/admin/permissions?success=Permission+created+successfully",
@@ -170,6 +171,7 @@ async def edit_permission_submit(
             is_active="is_active" in data,
         )
         permissions.update(db, str(permission_id), payload)
+        db.commit()
         logger.info("Updated permission via web: %s", permission_id)
         return RedirectResponse(
             url="/admin/permissions?success=Permission+updated+successfully",
@@ -199,6 +201,7 @@ async def delete_permission(
 
     try:
         permissions.delete(db, str(permission_id))
+        db.commit()
         logger.info("Deleted permission via web: %s", permission_id)
         return RedirectResponse(
             url="/admin/permissions?success=Permission+deleted+successfully",

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -14,7 +14,8 @@ from app.api.deps import get_db
 from app.models.person import Person
 from app.schemas.person import PersonCreate, PersonUpdate
 from app.services.branding_context import load_branding_context
-from app.services.person import people
+from app.services.exceptions import NotFoundError
+from app.services.person import People
 from app.templates import templates
 from app.web.deps import require_web_auth
 
@@ -120,7 +121,8 @@ async def create_person_submit(
             status=str(data.get("status", "active")),
             is_active=data.get("is_active") == "on",
         )
-        people.create(db, payload)
+        People(db).create(payload)
+        db.commit()
         logger.info("Created person via web: %s", payload.email)
         return RedirectResponse(
             url="/admin/people?success=Person+created+successfully",
@@ -144,7 +146,10 @@ def person_detail(
     auth: dict = Depends(require_web_auth),
 ) -> HTMLResponse:
     """Show person detail view."""
-    person = people.get(db, str(person_id))
+    try:
+        person = People(db).get(str(person_id))
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     ctx = _base_context(
         request,
         db,
@@ -164,7 +169,10 @@ def edit_person_form(
     auth: dict = Depends(require_web_auth),
 ) -> HTMLResponse:
     """Render the edit person form."""
-    person = people.get(db, str(person_id))
+    try:
+        person = People(db).get(str(person_id))
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     ctx = _base_context(
         request, db, auth, title="Edit Person", page_title="Edit Person"
     )
@@ -196,7 +204,8 @@ async def edit_person_submit(
             status=str(data["status"]) if data.get("status") else None,
             is_active="is_active" in data,
         )
-        people.update(db, str(person_id), payload)
+        People(db).update(str(person_id), payload)
+        db.commit()
         logger.info("Updated person via web: %s", person_id)
         return RedirectResponse(
             url=f"/admin/people/{person_id}?success=Person+updated+successfully",
@@ -225,7 +234,8 @@ async def delete_person(
     _ = form.get("csrf_token")  # consumed for CSRF validation
 
     try:
-        people.delete(db, str(person_id))
+        People(db).delete(str(person_id))
+        db.commit()
         logger.info("Deleted person via web: %s", person_id)
         return RedirectResponse(
             url="/admin/people?success=Person+deleted+successfully",

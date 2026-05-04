@@ -10,6 +10,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from fastapi import HTTPException, Request, Response, status
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -36,6 +37,8 @@ PASSWORD_CONTEXT = CryptContext(
     default="pbkdf2_sha256",
     deprecated="auto",
 )
+
+_DUMMY_PASSWORD_HASH = PASSWORD_CONTEXT.hash("dummy-password")
 
 
 def _env_value(name: str) -> str | None:
@@ -155,7 +158,7 @@ def _refresh_cookie_secure(db: Session | None) -> bool:
     value = _setting_value(db, "refresh_cookie_secure")
     if value is not None:
         return str(value).lower() in {"1", "true", "yes", "on"}
-    return False
+    return True
 
 
 def _refresh_cookie_samesite(db: Session | None) -> str:
@@ -319,15 +322,27 @@ def _load_rbac_claims(db: Session, person_id: str):
 
 
 def _primary_totp_method(db: Session, person_id: str) -> MFAMethod | None:
-    return (
-        db.query(MFAMethod)
-        .filter(MFAMethod.person_id == coerce_uuid(person_id))
-        .filter(MFAMethod.method_type == MFAMethodType.totp)
-        .filter(MFAMethod.is_active.is_(True))
-        .filter(MFAMethod.enabled.is_(True))
-        .filter(MFAMethod.is_primary.is_(True))
-        .first()
-    )
+    return db.scalars(
+        select(MFAMethod)
+        .where(MFAMethod.person_id == coerce_uuid(person_id))
+        .where(MFAMethod.method_type == MFAMethodType.totp)
+        .where(MFAMethod.is_active.is_(True))
+        .where(MFAMethod.enabled.is_(True))
+        .where(MFAMethod.is_primary.is_(True))
+        .limit(1)
+    ).first()
+
+
+def _verify_totp_once(method: MFAMethod, secret: str, code: str) -> bool:
+    totp = pyotp.TOTP(secret)
+    now = _now()
+    counter = totp.timecode(now)
+    if not totp.verify(code, for_time=now, valid_window=0):
+        return False
+    if method.last_totp_counter is not None and counter <= method.last_totp_counter:
+        return False
+    method.last_totp_counter = counter
+    return True
 
 
 def _encrypt_secret(db: Session | None, secret: str) -> str:
@@ -461,6 +476,7 @@ class AuthFlow(ListResponseMixin):
             .first()
         )
         if not credential:
+            verify_password(password, _DUMMY_PASSWORD_HASH)
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
         now = _now()
@@ -545,22 +561,25 @@ class AuthFlow(ListResponseMixin):
             raise HTTPException(status_code=400, detail="Unsupported MFA method")
 
         secret = _decrypt_secret(db, method.secret or "")
-        totp = pyotp.TOTP(secret)
-        if not totp.verify(code, valid_window=0):
+        if not _verify_totp_once(method, secret, code):
             raise HTTPException(status_code=401, detail="Invalid MFA code")
 
-        db.query(MFAMethod).filter(
-            MFAMethod.person_id == method.person_id,
-            MFAMethod.id != method.id,
-            MFAMethod.is_primary.is_(True),
-        ).update({"is_primary": False})
+        db.execute(
+            update(MFAMethod)
+            .where(
+                MFAMethod.person_id == method.person_id,
+                MFAMethod.id != method.id,
+                MFAMethod.is_primary.is_(True),
+            )
+            .values(is_primary=False)
+        )
 
         method.enabled = True
         method.is_primary = True
         method.is_active = True
         method.verified_at = _now()
         try:
-            db.commit()
+            db.flush()
         except IntegrityError as exc:
             db.rollback()
             raise HTTPException(
@@ -582,12 +601,11 @@ class AuthFlow(ListResponseMixin):
             raise HTTPException(status_code=404, detail="MFA method not found")
 
         secret = _decrypt_secret(db, method.secret or "")
-        totp = pyotp.TOTP(secret)
-        if not totp.verify(code, valid_window=0):
+        if not _verify_totp_once(method, secret, code):
             raise HTTPException(status_code=401, detail="Invalid MFA code")
 
         method.last_used_at = _now()
-        db.commit()
+        db.flush()
         return AuthFlow._issue_tokens(db, person_id, request)
 
     @staticmethod

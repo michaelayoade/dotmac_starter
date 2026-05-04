@@ -51,6 +51,17 @@ mock_db_module.TimestampMixin = TimestampMixin
 mock_db_module.SessionLocal = _TestSessionLocal
 mock_db_module.get_engine = lambda: _test_engine
 
+
+def _test_get_db():
+    db = _TestSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+mock_db_module.get_db = _test_get_db
+
 # Also mock app.config to prevent .env loading
 mock_config_module = ModuleType("app.config")
 
@@ -196,14 +207,12 @@ def client(db_session):
     """Create a test client with database dependency override."""
     from app.main import app
     from app.api.deps import get_db as api_get_db
-    from app.services.auth_dependencies import _get_db as auth_deps_get_db
 
     def override_get_db():
         yield db_session
 
     # Override shared db dependencies
     app.dependency_overrides[api_get_db] = override_get_db
-    app.dependency_overrides[auth_deps_get_db] = override_get_db
 
     with TestClient(app, raise_server_exceptions=False) as test_client:
         yield test_client
@@ -251,7 +260,7 @@ def auth_session(db_session, person):
 @pytest.fixture()
 def auth_token(person, auth_session):
     """Create a valid JWT token for authenticated requests."""
-    return _create_access_token(str(person.id), str(auth_session.id))
+    return _create_access_token(str(person.id), str(auth_session.id), roles=["admin"])
 
 
 @pytest.fixture()

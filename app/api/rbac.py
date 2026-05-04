@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
@@ -18,18 +18,33 @@ from app.schemas.rbac import (
     RoleUpdate,
 )
 from app.services import rbac as rbac_service
+from app.services.exceptions import NotFoundError
 
 router = APIRouter(prefix="/rbac", tags=["rbac"])
 
 
+def _not_found(exc: NotFoundError) -> HTTPException:
+    return HTTPException(status_code=404, detail=str(exc))
+
+
+def _commit_result(db: Session, result):
+    db.commit()
+    if result is not None:
+        db.refresh(result)
+    return result
+
+
 @router.post("/roles", response_model=RoleRead, status_code=status.HTTP_201_CREATED)
 def create_role(payload: RoleCreate, db: Session = Depends(get_db)):
-    return rbac_service.roles.create(db, payload)
+    return _commit_result(db, rbac_service.roles.create(db, payload))
 
 
 @router.get("/roles/{role_id}", response_model=RoleRead)
 def get_role(role_id: str, db: Session = Depends(get_db)):
-    return rbac_service.roles.get(db, role_id)
+    try:
+        return rbac_service.roles.get(db, role_id)
+    except NotFoundError as exc:
+        raise _not_found(exc) from exc
 
 
 @router.get("/roles", response_model=ListResponse[RoleRead])
@@ -48,24 +63,34 @@ def list_roles(
 
 @router.patch("/roles/{role_id}", response_model=RoleRead)
 def update_role(role_id: str, payload: RoleUpdate, db: Session = Depends(get_db)):
-    return rbac_service.roles.update(db, role_id, payload)
+    try:
+        return _commit_result(db, rbac_service.roles.update(db, role_id, payload))
+    except NotFoundError as exc:
+        raise _not_found(exc) from exc
 
 
 @router.delete("/roles/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_role(role_id: str, db: Session = Depends(get_db)):
-    rbac_service.roles.delete(db, role_id)
+    try:
+        rbac_service.roles.delete(db, role_id)
+    except NotFoundError as exc:
+        raise _not_found(exc) from exc
+    db.commit()
 
 
 @router.post(
     "/permissions", response_model=PermissionRead, status_code=status.HTTP_201_CREATED
 )
 def create_permission(payload: PermissionCreate, db: Session = Depends(get_db)):
-    return rbac_service.permissions.create(db, payload)
+    return _commit_result(db, rbac_service.permissions.create(db, payload))
 
 
 @router.get("/permissions/{permission_id}", response_model=PermissionRead)
 def get_permission(permission_id: str, db: Session = Depends(get_db)):
-    return rbac_service.permissions.get(db, permission_id)
+    try:
+        return rbac_service.permissions.get(db, permission_id)
+    except NotFoundError as exc:
+        raise _not_found(exc) from exc
 
 
 @router.get("/permissions", response_model=ListResponse[PermissionRead])
@@ -86,12 +111,21 @@ def list_permissions(
 def update_permission(
     permission_id: str, payload: PermissionUpdate, db: Session = Depends(get_db)
 ):
-    return rbac_service.permissions.update(db, permission_id, payload)
+    try:
+        return _commit_result(
+            db, rbac_service.permissions.update(db, permission_id, payload)
+        )
+    except NotFoundError as exc:
+        raise _not_found(exc) from exc
 
 
 @router.delete("/permissions/{permission_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_permission(permission_id: str, db: Session = Depends(get_db)):
-    rbac_service.permissions.delete(db, permission_id)
+    try:
+        rbac_service.permissions.delete(db, permission_id)
+    except NotFoundError as exc:
+        raise _not_found(exc) from exc
+    db.commit()
 
 
 @router.post(
@@ -102,12 +136,18 @@ def delete_permission(permission_id: str, db: Session = Depends(get_db)):
 def create_role_permission(
     payload: RolePermissionCreate, db: Session = Depends(get_db)
 ):
-    return rbac_service.role_permissions.create(db, payload)
+    try:
+        return _commit_result(db, rbac_service.role_permissions.create(db, payload))
+    except NotFoundError as exc:
+        raise _not_found(exc) from exc
 
 
 @router.get("/role-permissions/{link_id}", response_model=RolePermissionRead)
 def get_role_permission(link_id: str, db: Session = Depends(get_db)):
-    return rbac_service.role_permissions.get(db, link_id)
+    try:
+        return rbac_service.role_permissions.get(db, link_id)
+    except NotFoundError as exc:
+        raise _not_found(exc) from exc
 
 
 @router.get("/role-permissions", response_model=ListResponse[RolePermissionRead])
@@ -129,24 +169,39 @@ def list_role_permissions(
 def update_role_permission(
     link_id: str, payload: RolePermissionUpdate, db: Session = Depends(get_db)
 ):
-    return rbac_service.role_permissions.update(db, link_id, payload)
+    try:
+        return _commit_result(
+            db, rbac_service.role_permissions.update(db, link_id, payload)
+        )
+    except NotFoundError as exc:
+        raise _not_found(exc) from exc
 
 
 @router.delete("/role-permissions/{link_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_role_permission(link_id: str, db: Session = Depends(get_db)):
-    rbac_service.role_permissions.delete(db, link_id)
+    try:
+        rbac_service.role_permissions.delete(db, link_id)
+    except NotFoundError as exc:
+        raise _not_found(exc) from exc
+    db.commit()
 
 
 @router.post(
     "/person-roles", response_model=PersonRoleRead, status_code=status.HTTP_201_CREATED
 )
 def create_person_role(payload: PersonRoleCreate, db: Session = Depends(get_db)):
-    return rbac_service.person_roles.create(db, payload)
+    try:
+        return _commit_result(db, rbac_service.person_roles.create(db, payload))
+    except NotFoundError as exc:
+        raise _not_found(exc) from exc
 
 
 @router.get("/person-roles/{link_id}", response_model=PersonRoleRead)
 def get_person_role(link_id: str, db: Session = Depends(get_db)):
-    return rbac_service.person_roles.get(db, link_id)
+    try:
+        return rbac_service.person_roles.get(db, link_id)
+    except NotFoundError as exc:
+        raise _not_found(exc) from exc
 
 
 @router.get("/person-roles", response_model=ListResponse[PersonRoleRead])
@@ -168,9 +223,16 @@ def list_person_roles(
 def update_person_role(
     link_id: str, payload: PersonRoleUpdate, db: Session = Depends(get_db)
 ):
-    return rbac_service.person_roles.update(db, link_id, payload)
+    try:
+        return _commit_result(db, rbac_service.person_roles.update(db, link_id, payload))
+    except NotFoundError as exc:
+        raise _not_found(exc) from exc
 
 
 @router.delete("/person-roles/{link_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_person_role(link_id: str, db: Session = Depends(get_db)):
-    rbac_service.person_roles.delete(db, link_id)
+    try:
+        rbac_service.person_roles.delete(db, link_id)
+    except NotFoundError as exc:
+        raise _not_found(exc) from exc
+    db.commit()
