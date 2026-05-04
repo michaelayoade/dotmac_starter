@@ -28,7 +28,7 @@
     <script defer src="{{ static_asset_url('/static/js/alpine.min.js') }}"></script>
 
     <!-- Custom Styles -->
-    <style>
+    <style nonce="{{ request.state.csp_nonce }}">
         [x-cloak] { display: none !important; }
         .htmx-request .htmx-indicator { opacity: 1; }
         .htmx-indicator { opacity: 0; transition: opacity 200ms ease-in; }

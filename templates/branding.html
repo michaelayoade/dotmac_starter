@@ -89,13 +89,14 @@
         <h2 class="text-lg font-semibold text-slate-900 dark:text-white">Live Preview</h2>
         <div class="mt-4 rounded-xl border border-slate-200 dark:border-slate-700">
           <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-700"
-               :style="gradientStyle()">
+               x-ref="previewHeader"
+               x-effect="syncPreviewStyles()">
             <span class="text-sm font-semibold text-white" x-text="displayFont"></span>
             <span class="rounded-full bg-white/20 px-2 py-0.5 text-xs text-white">Preview</span>
           </div>
           <div class="p-4">
-            <h3 class="font-display text-lg text-slate-900 dark:text-white" :style="displayFontStyle()">Heading Sample</h3>
-            <p class="mt-1 text-sm text-slate-600 dark:text-slate-300" :style="bodyFontStyle()">Body sample text for readability and spacing.</p>
+            <h3 class="font-display text-lg text-slate-900 dark:text-white" x-ref="displaySample">Heading Sample</h3>
+            <p class="mt-1 text-sm text-slate-600 dark:text-slate-300" x-ref="bodySample">Body sample text for readability and spacing.</p>
             <button class="btn-brand mt-3 rounded-lg px-3 py-1.5 text-xs font-semibold">Primary Action</button>
           </div>
         </div>

@@ -124,6 +124,7 @@ async def branding_settings_update(request: Request, db: Session = Depends(get_d
         "logo_dark_url": data.get("logo_dark_url", branding.get("logo_dark_url")),
     }
     saved = save_branding(db, payload)
+    db.commit()
     saved_ctx = branding_context_from_values(saved)
     return templates.TemplateResponse(
         "branding.html",

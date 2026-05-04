@@ -4,7 +4,7 @@
 <link href="{{ org_branding.fonts_url }}" rel="stylesheet">
 {% endif %}
 {% if org_branding and org_branding.css %}
-<style id="org-branding">
+<style id="org-branding" nonce="{{ request.state.csp_nonce }}">
 {{ org_branding.css }}
 </style>
 {% endif %}

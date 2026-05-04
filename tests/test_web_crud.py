@@ -1,8 +1,31 @@
 """Tests for web CRUD admin pages."""
 
-import uuid
+import os
+from datetime import UTC, datetime, timedelta
 
-import pytest
+from jose import jwt
+
+
+def _create_access_token(
+    person_id: str, session_id: str, roles: list[str] | None = None
+) -> str:
+    secret = os.getenv("JWT_SECRET", "test-secret")
+    algorithm = os.getenv("JWT_ALGORITHM", "HS256")
+    now = datetime.now(UTC)
+    expire = now + timedelta(minutes=15)
+    return jwt.encode(
+        {
+            "sub": person_id,
+            "session_id": session_id,
+            "roles": roles or [],
+            "scopes": [],
+            "typ": "access",
+            "exp": int(expire.timestamp()),
+            "iat": int(now.timestamp()),
+        },
+        secret,
+        algorithm=algorithm,
+    )
 
 
 class TestWebPeople:
@@ -17,6 +40,14 @@ class TestWebPeople:
         )
         assert response.status_code == 200
         assert b"People" in response.content
+
+    def test_list_forbidden_without_admin_role(self, client, person, auth_session):
+        token = _create_access_token(str(person.id), str(auth_session.id), roles=[])
+        response = client.get(
+            "/admin/people",
+            cookies={"access_token": token},
+        )
+        assert response.status_code == 403
 
     def test_create_page(self, client, person, auth_session, auth_token):
         response = client.get(

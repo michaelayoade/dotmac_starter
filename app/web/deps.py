@@ -6,12 +6,14 @@ import logging
 from datetime import UTC, datetime
 
 from fastapi import Depends, HTTPException, Request
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.models.auth import Session as AuthSession
 from app.models.auth import SessionStatus
 from app.models.person import Person
+from app.models.rbac import PersonRole, Role
 from app.services.auth_flow import decode_access_token
 from app.services.common import coerce_uuid
 
@@ -76,6 +78,17 @@ def require_web_auth(
 
     raw_roles = payload.get("roles", [])
     roles = [str(r) for r in raw_roles] if isinstance(raw_roles, list) else []
+    if "admin" not in roles:
+        has_admin_role = db.scalars(
+            select(PersonRole)
+            .join(Role, PersonRole.role_id == Role.id)
+            .where(PersonRole.person_id == person_uuid)
+            .where(Role.name == "admin")
+            .where(Role.is_active.is_(True))
+            .limit(1)
+        ).first()
+        if not has_admin_role:
+            raise HTTPException(status_code=403, detail="Forbidden")
 
     return {
         "person_id": str(person_id),

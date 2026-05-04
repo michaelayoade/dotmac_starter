@@ -222,14 +222,16 @@ document.addEventListener('alpine:init', function () {
                     this.bodyFont = d.bodyFont || '';
                 }
             },
-            gradientStyle: function () {
-                return 'background: linear-gradient(120deg, ' + this.primary + ', ' + this.accent + ')';
-            },
-            displayFontStyle: function () {
-                return 'font-family: ' + this.displayFont;
-            },
-            bodyFontStyle: function () {
-                return 'font-family: ' + this.bodyFont;
+            syncPreviewStyles: function () {
+                if (this.$refs.previewHeader) {
+                    this.$refs.previewHeader.style.background = 'linear-gradient(120deg, ' + this.primary + ', ' + this.accent + ')';
+                }
+                if (this.$refs.displaySample) {
+                    this.$refs.displaySample.style.fontFamily = this.displayFont;
+                }
+                if (this.$refs.bodySample) {
+                    this.$refs.bodySample.style.fontFamily = this.bodyFont;
+                }
             }
         };
     });

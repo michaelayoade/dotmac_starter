@@ -98,6 +98,8 @@ class FileUploadService:
         *,
         uploaded_by: UUID | None = None,
         category: str | None = None,
+        entity_type: str | None = None,
+        entity_id: str | None = None,
     ) -> int:
         """Count active file uploads."""
         from sqlalchemy import func
@@ -114,6 +116,10 @@ class FileUploadService:
             stmt = stmt.where(FileUpload.uploaded_by == uploaded_by)
         if category is not None:
             stmt = stmt.where(FileUpload.category == category)
+        if entity_type is not None:
+            stmt = stmt.where(FileUpload.entity_type == entity_type)
+        if entity_id is not None:
+            stmt = stmt.where(FileUpload.entity_id == entity_id)
         result = self.db.execute(stmt).scalar()
         return result or 0
 

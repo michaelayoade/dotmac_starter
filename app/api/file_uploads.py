@@ -6,12 +6,12 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db, require_user_auth
 from app.schemas.common import ListResponse
 from app.schemas.file_upload import FileUploadRead
+from app.services.common import coerce_uuid
 from app.services.file_upload import FileUploadService
 
 router = APIRouter(
     prefix="/file-uploads",
     tags=["file-uploads"],
-    dependencies=[Depends(require_user_auth)],
 )
 
 
@@ -21,6 +21,7 @@ async def upload_file(
     category: str = Form(default="document"),
     entity_type: str | None = Form(default=None),
     entity_id: str | None = Form(default=None),
+    auth: dict = Depends(require_user_auth),
     db: Session = Depends(get_db),
 ) -> FileUploadRead:
     content = await file.read()
@@ -29,6 +30,7 @@ async def upload_file(
         content=content,
         filename=file.filename or "unknown",
         content_type=file.content_type or "application/octet-stream",
+        uploaded_by=coerce_uuid(auth["person_id"]),
         category=category,
         entity_type=entity_type,
         entity_id=entity_id,
@@ -38,7 +40,12 @@ async def upload_file(
 
 
 @router.get("/{file_id}", response_model=FileUploadRead)
-def get_file_upload(file_id: UUID, db: Session = Depends(get_db)) -> FileUploadRead:
+def get_file_upload(
+    file_id: UUID,
+    auth: dict = Depends(require_user_auth),
+    db: Session = Depends(get_db),
+) -> FileUploadRead:
+    _ = auth
     svc = FileUploadService(db)
     record = svc.get_by_id(file_id)
     if not record or not record.is_active:
@@ -55,8 +62,10 @@ def list_file_uploads(
     entity_id: str | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    auth: dict = Depends(require_user_auth),
     db: Session = Depends(get_db),
 ) -> ListResponse[FileUploadRead]:
+    _ = auth
     svc = FileUploadService(db)
     items = svc.list_uploads(
         category=category,
@@ -65,7 +74,11 @@ def list_file_uploads(
         limit=limit,
         offset=offset,
     )
-    total = svc.count(category=category)
+    total = svc.count(
+        category=category,
+        entity_type=entity_type,
+        entity_id=entity_id,
+    )
     return ListResponse(
         items=[FileUploadRead.model_validate(i) for i in items],
         count=len(items),
@@ -76,7 +89,12 @@ def list_file_uploads(
 
 
 @router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_file_upload(file_id: UUID, db: Session = Depends(get_db)) -> None:
+def delete_file_upload(
+    file_id: UUID,
+    auth: dict = Depends(require_user_auth),
+    db: Session = Depends(get_db),
+) -> None:
+    _ = auth
     svc = FileUploadService(db)
     svc.delete(file_id)
     db.commit()

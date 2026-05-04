@@ -1,9 +1,7 @@
 """Tests for file upload API endpoints."""
 
 import io
-from unittest.mock import patch, MagicMock
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 
 def _csrf_headers(client) -> dict[str, str]:
@@ -40,6 +38,26 @@ class TestFileUploadAPI:
         assert data["original_filename"] == "test.txt"
         assert data["content_type"] == "text/plain"
         assert data["category"] == "document"
+
+    def test_upload_file_records_actor(self, client, auth_headers, person):
+        csrf = _csrf_headers(client)
+        headers = {**auth_headers, **csrf}
+        with patch("app.services.file_upload.get_storage_backend") as mock_backend:
+            storage = MagicMock()
+            storage.save.return_value = "actor_test.txt"
+            storage.get_url.return_value = "/static/uploads/actor_test.txt"
+            mock_backend.return_value = storage
+
+            response = client.post(
+                "/file-uploads",
+                files={"file": ("actor.txt", io.BytesIO(b"data"), "text/plain")},
+                data={"csrf_token": csrf.get("X-CSRF-Token", "")},
+                headers=headers,
+                cookies=client.cookies,
+            )
+
+        assert response.status_code == 201
+        assert response.json()["uploaded_by"] == str(person.id)
 
     def test_upload_file_unauthenticated(self, client):
         csrf = _csrf_headers(client)

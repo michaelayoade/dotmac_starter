@@ -69,6 +69,15 @@ class TestSecurityHeaders:
         assert "'unsafe-inline'" not in script_src
         assert "'nonce-" in script_src
 
+    def test_no_unsafe_inline_in_style_src(self, client: TestClient) -> None:
+        resp = client.get("/test")
+        csp = resp.headers["Content-Security-Policy"]
+        style_src = next(
+            directive for directive in csp.split(";") if "style-src" in directive
+        )
+        assert "'unsafe-inline'" not in style_src
+        assert "'nonce-" in style_src
+
     def test_no_cdn_allowlist_in_csp(self, client: TestClient) -> None:
         resp = client.get("/test")
         csp = resp.headers["Content-Security-Policy"]
