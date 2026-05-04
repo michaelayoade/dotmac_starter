@@ -1,18 +1,17 @@
 """Tests for WebSocket connection manager."""
 
-import asyncio
 import uuid
 from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 import pytest
+from starlette.websockets import WebSocketState
 
 from app.services.websocket_manager import ConnectionManager
-from starlette.websockets import WebSocketState
 
 
 @pytest.fixture()
 def manager():
-    return ConnectionManager()
+    return ConnectionManager(redis_enabled=False)
 
 
 def _make_ws(connected: bool = True) -> MagicMock:
@@ -93,6 +92,45 @@ class TestConnectionManager:
         await manager.broadcast({"type": "broadcast"})
         ws1.send_text.assert_called_once()
         ws2.send_text.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_handle_redis_message_to_person(self, manager):
+        person_id = uuid.uuid4()
+        ws = _make_ws()
+        await manager.connect(person_id, ws)
+
+        await manager._handle_redis_message(
+            f'{{"person_id":"{person_id}","data":{{"type":"redis"}}}}'
+        )
+
+        ws.send_text.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_handle_redis_message_ignores_same_node(self, manager):
+        person_id = uuid.uuid4()
+        ws = _make_ws()
+        await manager.connect(person_id, ws)
+
+        await manager._handle_redis_message(
+            f'{{"sender":"{manager._node_id}","person_id":"{person_id}",'
+            '"data":{"type":"redis"}}'
+        )
+
+        ws.send_text.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_publish_failure_falls_back_to_local(self, manager, monkeypatch):
+        person_id = uuid.uuid4()
+        ws = _make_ws()
+        await manager.connect(person_id, ws)
+
+        async def fail_publish(payload):
+            return False
+
+        monkeypatch.setattr(manager, "_publish", fail_publish)
+        await manager.send_to_person(person_id, {"type": "fallback"})
+
+        ws.send_text.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_dead_connection_cleanup(self, manager):
