@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.config import settings
-from app.services import person as person_service
 from app.services.branding import save_branding
 from app.services.branding_assets import delete_branding_asset, save_branding_asset
 from app.services.branding_context import (
@@ -12,6 +11,7 @@ from app.services.branding_context import (
     load_branding_context,
 )
 from app.templates import templates
+from app.web.deps import require_web_auth
 
 router = APIRouter()
 
@@ -27,21 +27,6 @@ def home(
     page = max(page, 1)
     order_by = sort if sort in {"created_at", "last_name", "email"} else "created_at"
     order_dir = dir if dir in {"asc", "desc"} else "desc"
-    limit = 25
-    offset = (page - 1) * limit
-
-    people = person_service.people.list(
-        db=db,
-        email=None,
-        status=None,
-        is_active=None,
-        order_by=order_by,
-        order_dir=order_dir,
-        limit=limit,
-        offset=offset,
-    )
-    total_people = db.query(person_service.Person).count()
-    total_pages = max(1, (total_people + limit - 1) // limit)
 
     branding_ctx = load_branding_context(db)
     brand_name = settings.brand_name
@@ -50,20 +35,25 @@ def home(
         {
             "request": request,
             "title": brand_name,
-            "people": people,
+            "people": [],
             "brand": branding_ctx["brand"],
             "org_branding": branding_ctx["org_branding"],
             "sort": order_by,
             "dir": order_dir,
             "page": page,
-            "total_pages": total_pages,
-            "total_people": total_people,
+            "total_pages": 1,
+            "total_people": 0,
         },
     )
 
 
 @router.get("/settings/branding", tags=["web"], response_class=HTMLResponse)
-def branding_settings(request: Request, db: Session = Depends(get_db)):
+def branding_settings(
+    request: Request,
+    db: Session = Depends(get_db),
+    auth: dict = Depends(require_web_auth),
+):
+    _ = auth
     branding_ctx = load_branding_context(db)
     return templates.TemplateResponse(
         "branding.html",
@@ -78,7 +68,12 @@ def branding_settings(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/settings/branding", tags=["web"], response_class=HTMLResponse)
-async def branding_settings_update(request: Request, db: Session = Depends(get_db)):
+async def branding_settings_update(
+    request: Request,
+    db: Session = Depends(get_db),
+    auth: dict = Depends(require_web_auth),
+):
+    _ = auth
     form = await request.form()
     data = dict(form)
     branding_ctx = load_branding_context(db)

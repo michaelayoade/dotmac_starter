@@ -258,8 +258,22 @@ def auth_session(db_session, person):
 
 
 @pytest.fixture()
-def auth_token(person, auth_session):
+def auth_token(db_session, person, auth_session):
     """Create a valid JWT token for authenticated requests."""
+    role = db_session.query(Role).filter(Role.name == "admin").first()
+    if not role:
+        role = Role(name="admin", description="Administrator role")
+        db_session.add(role)
+        db_session.flush()
+    existing = (
+        db_session.query(PersonRole)
+        .filter(PersonRole.person_id == person.id)
+        .filter(PersonRole.role_id == role.id)
+        .first()
+    )
+    if not existing:
+        db_session.add(PersonRole(person_id=person.id, role_id=role.id))
+        db_session.commit()
     return _create_access_token(str(person.id), str(auth_session.id), roles=["admin"])
 
 

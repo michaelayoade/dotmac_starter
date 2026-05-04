@@ -29,6 +29,11 @@ def _create_access_token(
 
 
 class TestWebPeople:
+    def test_home_does_not_expose_people(self, client, person):
+        response = client.get("/")
+        assert response.status_code == 200
+        assert person.email.encode() not in response.content
+
     def test_list_requires_auth(self, client):
         response = client.get("/admin/people", follow_redirects=False)
         assert response.status_code == 302
@@ -101,6 +106,17 @@ class TestWebSettings:
     def test_list(self, client, person, auth_session, auth_token):
         response = client.get(
             "/admin/settings",
+            cookies={"access_token": auth_token},
+        )
+        assert response.status_code == 200
+
+    def test_branding_requires_auth(self, client):
+        response = client.get("/settings/branding", follow_redirects=False)
+        assert response.status_code == 302
+
+    def test_branding_with_auth(self, client, person, auth_session, auth_token):
+        response = client.get(
+            "/settings/branding",
             cookies={"access_token": auth_token},
         )
         assert response.status_code == 200

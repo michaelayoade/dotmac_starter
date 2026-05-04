@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from app.models.file_upload import FileUpload, FileUploadStatus
+from app.models.file_upload import FileUploadStatus
+from app.services.exceptions import BadRequestError, NotFoundError
 from app.services.file_upload import FileUploadService
 from app.services.storage import LocalStorage
 
@@ -52,7 +53,7 @@ class TestFileUploadService:
         assert (Path(storage_dir) / record.storage_key).exists()
 
     def test_upload_invalid_content_type_raises(self, upload_service):
-        with pytest.raises(ValueError, match="not allowed"):
+        with pytest.raises(BadRequestError, match="not allowed"):
             upload_service.upload(
                 content=b"data",
                 filename="test.exe",
@@ -62,12 +63,28 @@ class TestFileUploadService:
     def test_upload_too_large_raises(self, upload_service):
         # Create content larger than max (10MB default in test settings)
         large_content = b"x" * (11 * 1024 * 1024)
-        with pytest.raises(ValueError, match="too large"):
+        with pytest.raises(BadRequestError, match="too large"):
             upload_service.upload(
                 content=large_content,
                 filename="big.txt",
                 content_type="text/plain",
             )
+
+    def test_upload_rejects_disguised_html(self, upload_service):
+        with pytest.raises(BadRequestError, match="verify"):
+            upload_service.upload(
+                content=b"<!doctype html><script>alert(1)</script>",
+                filename="payload.html",
+                content_type="text/plain",
+            )
+
+    def test_upload_normalizes_storage_extension(self, upload_service):
+        record = upload_service.upload(
+            content=b"plain text",
+            filename="payload.html",
+            content_type="text/plain",
+        )
+        assert record.storage_key.endswith(".txt")
 
     def test_get_by_id(self, upload_service, db_session):
         record = upload_service.upload(
@@ -119,7 +136,7 @@ class TestFileUploadService:
     def test_delete_not_found_raises(self, upload_service):
         import uuid
 
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(NotFoundError, match="not found"):
             upload_service.delete(uuid.uuid4())
 
     def test_upload_with_metadata(self, upload_service, db_session):

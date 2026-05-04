@@ -14,7 +14,6 @@ from app.models.rbac import PersonRole, Role
 from app.services import auth as auth_service
 from app.services.auth_dependencies import (
     _extract_bearer_token,
-    _has_audit_scope,
     _is_jwt,
     _make_aware,
     require_audit_auth,
@@ -84,49 +83,6 @@ class TestHelperFunctions:
         assert _is_jwt("simple-token") is False
         assert _is_jwt("token.with.too.many.parts") is False
         assert _is_jwt("") is False
-
-
-class TestHasAuditScope:
-    """Tests for audit scope checking."""
-
-    def test_has_audit_scope_with_audit_read(self):
-        """Test audit:read scope grants access."""
-        payload = {"scopes": ["audit:read", "other:scope"]}
-        assert _has_audit_scope(payload) is True
-
-    def test_has_audit_scope_with_audit_wildcard(self):
-        """Test audit:* scope grants access."""
-        payload = {"scopes": ["audit:*"]}
-        assert _has_audit_scope(payload) is True
-
-    def test_has_audit_scope_with_admin_role(self):
-        """Test admin role grants audit access."""
-        payload = {"roles": ["admin"]}
-        assert _has_audit_scope(payload) is True
-
-    def test_has_audit_scope_with_auditor_role(self):
-        """Test auditor role grants audit access."""
-        payload = {"roles": ["auditor"]}
-        assert _has_audit_scope(payload) is True
-
-    def test_has_audit_scope_with_scope_string(self):
-        """Test scope as space-separated string."""
-        payload = {"scope": "audit:read openid profile"}
-        assert _has_audit_scope(payload) is True
-
-    def test_has_audit_scope_with_single_role_string(self):
-        """Test single role as string."""
-        payload = {"role": "admin"}
-        assert _has_audit_scope(payload) is True
-
-    def test_has_audit_scope_without_permission(self):
-        """Test without audit permission returns False."""
-        payload = {"scopes": ["users:read"], "roles": ["viewer"]}
-        assert _has_audit_scope(payload) is False
-
-    def test_has_audit_scope_empty_payload(self):
-        """Test empty payload returns False."""
-        assert _has_audit_scope({}) is False
 
 
 class TestRequireAuditAuthWithApiKey:
@@ -377,9 +333,10 @@ class TestAuditScopeEnforcement:
             assert "scope" in exc.value.detail.lower()
 
     def test_audit_scope_via_jwt_succeeds(self, db_session, person):
-        """Test that valid audit scope in JWT succeeds (without session_id)."""
+        """Test that current DB audit role allows JWT audit access."""
+        _grant_audit_role(db_session, person)
         now = datetime.now(UTC)
-        # Payload with audit scope but no session_id - skips session lookup
+        # Token claims alone are not trusted; the DB role above grants access.
         payload = {
             "sub": str(person.id),
             "typ": "access",

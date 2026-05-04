@@ -17,6 +17,19 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 
+def _extension_for_content_type(content_type: str) -> str:
+    mapping = {
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/gif": ".gif",
+        "image/webp": ".webp",
+        "application/pdf": ".pdf",
+        "text/plain": ".txt",
+        "text/csv": ".csv",
+    }
+    return mapping.get(content_type, ".bin")
+
+
 class StorageBackend(ABC):
     """Abstract interface for file storage."""
 
@@ -49,10 +62,8 @@ class LocalStorage(StorageBackend):
     def save(self, content: bytes, filename: str, content_type: str) -> str:
         self.base_dir.mkdir(parents=True, exist_ok=True)
         unique = uuid.uuid4().hex[:10]
-        ext = Path(filename).suffix or ""
-        storage_key = (
-            f"{unique}_{filename}" if len(filename) <= 80 else f"{unique}{ext}"
-        )
+        ext = _extension_for_content_type(content_type)
+        storage_key = f"{unique}{ext}"
         file_path = self.base_dir / storage_key
         with open(file_path, "wb") as f:
             f.write(content)
@@ -118,10 +129,8 @@ class S3Storage(StorageBackend):
 
     def save(self, content: bytes, filename: str, content_type: str) -> str:
         unique = uuid.uuid4().hex[:10]
-        ext = Path(filename).suffix or ""
-        storage_key = (
-            f"{unique}_{filename}" if len(filename) <= 80 else f"{unique}{ext}"
-        )
+        ext = _extension_for_content_type(content_type)
+        storage_key = f"{unique}{ext}"
         client = self._get_client()
         client.put_object(  # type: ignore[union-attr]
             Bucket=self.bucket,

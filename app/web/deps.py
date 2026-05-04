@@ -76,19 +76,16 @@ def require_web_auth(
     if not person:
         raise WebAuthRedirect(next_url=request.url.path)
 
-    raw_roles = payload.get("roles", [])
-    roles = [str(r) for r in raw_roles] if isinstance(raw_roles, list) else []
-    if "admin" not in roles:
-        has_admin_role = db.scalars(
-            select(PersonRole)
-            .join(Role, PersonRole.role_id == Role.id)
+    roles = list(
+        db.scalars(
+            select(Role.name)
+            .join(PersonRole, PersonRole.role_id == Role.id)
             .where(PersonRole.person_id == person_uuid)
-            .where(Role.name == "admin")
             .where(Role.is_active.is_(True))
-            .limit(1)
-        ).first()
-        if not has_admin_role:
-            raise HTTPException(status_code=403, detail="Forbidden")
+        ).all()
+    )
+    if "admin" not in roles:
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     return {
         "person_id": str(person_id),

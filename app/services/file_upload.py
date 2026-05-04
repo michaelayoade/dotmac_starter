@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from uuid import UUID
 
 from sqlalchemy import select
@@ -10,9 +11,61 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.file_upload import FileUpload, FileUploadStatus
+from app.services.exceptions import BadRequestError, NotFoundError
 from app.services.storage import StorageBackend, get_storage_backend
 
 logger = logging.getLogger(__name__)
+
+_DANGEROUS_TEXT_PATTERNS = (
+    re.compile(rb"(?is)<\s*(?:!doctype|html|head|body|script|iframe|object|embed)\b"),
+    re.compile(rb"(?is)\bjavascript\s*:"),
+)
+
+
+def _allowed_types() -> set[str]:
+    return {item.strip() for item in settings.upload_allowed_types.split(",")}
+
+
+def _sniff_binary_content_type(content: bytes) -> str | None:
+    if content.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if content.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if content.startswith((b"GIF87a", b"GIF89a")):
+        return "image/gif"
+    if content.startswith(b"RIFF") and len(content) >= 12 and content[8:12] == b"WEBP":
+        return "image/webp"
+    if content.startswith(b"%PDF-"):
+        return "application/pdf"
+    return None
+
+
+def _is_safe_text(content: bytes) -> bool:
+    sample = content[:4096]
+    if b"\x00" in sample:
+        return False
+    try:
+        sample.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return not any(pattern.search(sample) for pattern in _DANGEROUS_TEXT_PATTERNS)
+
+
+def _validate_content(content: bytes, declared_type: str) -> str:
+    allowed = _allowed_types()
+    if declared_type not in allowed:
+        raise BadRequestError(f"File type '{declared_type}' not allowed")
+
+    sniffed = _sniff_binary_content_type(content)
+    if sniffed:
+        if sniffed != declared_type:
+            raise BadRequestError("Uploaded file content does not match file type")
+        return sniffed
+
+    if declared_type in {"text/plain", "text/csv"} and _is_safe_text(content):
+        return declared_type
+
+    raise BadRequestError("Could not verify uploaded file type")
 
 
 class FileUploadService:
@@ -34,20 +87,18 @@ class FileUploadService:
         metadata_: dict | None = None,
     ) -> FileUpload:
         """Upload a file and create a database record."""
-        allowed = {t.strip() for t in settings.upload_allowed_types.split(",")}
-        if content_type not in allowed:
-            raise ValueError(f"File type '{content_type}' not allowed")
         if len(content) > settings.upload_max_size_bytes:
             max_mb = settings.upload_max_size_bytes // (1024 * 1024)
-            raise ValueError(f"File too large. Maximum size: {max_mb}MB")
+            raise BadRequestError(f"File too large. Maximum size: {max_mb}MB")
+        verified_content_type = _validate_content(content, content_type)
 
-        storage_key = self.storage.save(content, filename, content_type)
+        storage_key = self.storage.save(content, filename, verified_content_type)
         url = self.storage.get_url(storage_key)
 
         record = FileUpload(
             uploaded_by=uploaded_by,
             original_filename=filename,
-            content_type=content_type,
+            content_type=verified_content_type,
             file_size=len(content),
             storage_backend=settings.storage_backend,
             storage_key=storage_key,
@@ -127,7 +178,7 @@ class FileUploadService:
         """Soft-delete a file upload and remove from storage."""
         record = self.db.get(FileUpload, file_id)
         if not record:
-            raise ValueError("File upload not found")
+            raise NotFoundError("File upload not found")
         try:
             self.storage.delete(record.storage_key)
         except Exception:

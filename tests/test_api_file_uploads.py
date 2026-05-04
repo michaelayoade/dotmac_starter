@@ -3,6 +3,8 @@
 import io
 from unittest.mock import MagicMock, patch
 
+from tests.conftest import _create_access_token
+
 
 def _csrf_headers(client) -> dict[str, str]:
     """Get a valid CSRF token from the test client."""
@@ -70,6 +72,42 @@ class TestFileUploadAPI:
         )
         assert response.status_code == 401
 
+    def test_upload_file_invalid_type_returns_400(self, client, auth_headers):
+        csrf = _csrf_headers(client)
+        headers = {**auth_headers, **csrf}
+        response = client.post(
+            "/file-uploads",
+            files={
+                "file": (
+                    "payload.exe",
+                    io.BytesIO(b"not allowed"),
+                    "application/x-msdownload",
+                )
+            },
+            data={"csrf_token": csrf.get("X-CSRF-Token", "")},
+            headers=headers,
+            cookies=client.cookies,
+        )
+        assert response.status_code == 400
+
+    def test_upload_file_rejects_disguised_html(self, client, auth_headers):
+        csrf = _csrf_headers(client)
+        headers = {**auth_headers, **csrf}
+        response = client.post(
+            "/file-uploads",
+            files={
+                "file": (
+                    "payload.html",
+                    io.BytesIO(b"<!doctype html><script>alert(1)</script>"),
+                    "text/plain",
+                )
+            },
+            data={"csrf_token": csrf.get("X-CSRF-Token", "")},
+            headers=headers,
+            cookies=client.cookies,
+        )
+        assert response.status_code == 400
+
     def test_list_file_uploads(self, client, auth_headers, db_session):
         from app.models.file_upload import FileUpload, FileUploadStatus
 
@@ -109,6 +147,31 @@ class TestFileUploadAPI:
         assert response.status_code == 200
         assert response.json()["original_filename"] == "get_test.txt"
 
+    def test_get_file_upload_forbidden_for_other_user(
+        self, client, person, auth_session, db_session
+    ):
+        from app.models.file_upload import FileUpload, FileUploadStatus
+
+        upload = FileUpload(
+            original_filename="private.txt",
+            content_type="text/plain",
+            file_size=50,
+            storage_key="private-key",
+            url="/static/uploads/private-key",
+            uploaded_by=None,
+            status=FileUploadStatus.active,
+        )
+        db_session.add(upload)
+        db_session.commit()
+        db_session.refresh(upload)
+
+        token = _create_access_token(str(person.id), str(auth_session.id), roles=[])
+        response = client.get(
+            f"/file-uploads/{upload.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 404
+
     def test_get_file_upload_not_found(self, client, auth_headers):
         import uuid
 
@@ -136,3 +199,9 @@ class TestFileUploadAPI:
 
             response = client.delete(f"/file-uploads/{upload.id}", headers=auth_headers)
         assert response.status_code == 204
+
+    def test_delete_file_upload_not_found(self, client, auth_headers):
+        import uuid
+
+        response = client.delete(f"/file-uploads/{uuid.uuid4()}", headers=auth_headers)
+        assert response.status_code == 404

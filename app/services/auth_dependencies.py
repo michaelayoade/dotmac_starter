@@ -9,7 +9,7 @@ from app.models.auth import ApiKey, SessionStatus
 from app.models.auth import Session as AuthSession
 from app.models.rbac import Permission, PersonRole, Role, RolePermission
 from app.services.auth import hash_api_key
-from app.services.auth_flow import decode_access_token, hash_session_token
+from app.services.auth_flow import decode_access_token, session_token_hash_candidates
 from app.services.common import coerce_uuid
 
 
@@ -33,29 +33,6 @@ def _extract_bearer_token(authorization: str | None) -> str | None:
 
 def _is_jwt(token: str) -> bool:
     return token.count(".") == 2
-
-
-def _has_audit_scope(payload: dict) -> bool:
-    scopes: set[str] = set()
-    scope_value = payload.get("scope")
-    if isinstance(scope_value, str):
-        scopes.update(scope_value.split())
-    scopes_value = payload.get("scopes")
-    if isinstance(scopes_value, list):
-        scopes.update(str(item) for item in scopes_value)
-    role_value = payload.get("role")
-    roles_value = payload.get("roles")
-    roles: set[str] = set()
-    if isinstance(role_value, str):
-        roles.add(role_value)
-    if isinstance(roles_value, list):
-        roles.update(str(item) for item in roles_value)
-    return (
-        "audit:read" in scopes
-        or "audit:*" in scopes
-        or "admin" in roles
-        or "auditor" in roles
-    )
 
 
 def _person_has_audit_scope(db: Session, person_id: object) -> bool:
@@ -84,6 +61,21 @@ def _person_has_audit_scope(db: Session, person_id: object) -> bool:
     return bool(permission_keys.intersection({"audit:read", "audit:*"}))
 
 
+def _person_has_role(db: Session, person_id: object, role_name: str) -> bool:
+    person_uuid = coerce_uuid(str(person_id))
+    return (
+        db.scalars(
+            select(PersonRole)
+            .join(Role, PersonRole.role_id == Role.id)
+            .where(PersonRole.person_id == person_uuid)
+            .where(Role.name == role_name)
+            .where(Role.is_active.is_(True))
+            .limit(1)
+        ).first()
+        is not None
+    )
+
+
 def require_audit_auth(
     authorization: str | None = Header(default=None),
     x_session_token: str | None = Header(default=None),
@@ -96,8 +88,6 @@ def require_audit_auth(
     if token:
         if _is_jwt(token):
             payload = decode_access_token(db, token)
-            if not _has_audit_scope(payload):
-                raise HTTPException(status_code=403, detail="Insufficient scope")
             session_id = payload.get("session_id")
             if session_id:
                 session = db.get(AuthSession, coerce_uuid(session_id))
@@ -108,12 +98,14 @@ def require_audit_auth(
                 if _make_aware(session.expires_at) <= now:
                     raise HTTPException(status_code=401, detail="Session expired")
             actor_id = str(payload.get("sub"))
+            if not _person_has_audit_scope(db, actor_id):
+                raise HTTPException(status_code=403, detail="Insufficient scope")
             if request is not None:
                 request.state.actor_id = actor_id
             return {"actor_type": "user", "actor_id": actor_id}
         session = db.scalars(
             select(AuthSession)
-            .where(AuthSession.token_hash == hash_session_token(token))
+            .where(AuthSession.token_hash.in_(session_token_hash_candidates(token)))
             .where(AuthSession.status == SessionStatus.active)
             .where(AuthSession.revoked_at.is_(None))
             .where(AuthSession.expires_at > now)
@@ -196,9 +188,6 @@ def require_role(role_name: str):
         db: Session = Depends(get_db),
     ):
         person_id = coerce_uuid(auth["person_id"])
-        roles = set(auth.get("roles") or [])
-        if role_name in roles:
-            return auth
         role = db.scalars(
             select(Role)
             .where(Role.name == role_name)
@@ -226,9 +215,7 @@ def require_permission(permission_key: str):
         db: Session = Depends(get_db),
     ):
         person_id = coerce_uuid(auth["person_id"])
-        roles = set(auth.get("roles") or [])
-        scopes = set(auth.get("scopes") or [])
-        if "admin" in roles or permission_key in scopes:
+        if _person_has_role(db, person_id, "admin"):
             return auth
         permission = db.scalars(
             select(Permission)
