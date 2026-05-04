@@ -175,11 +175,13 @@ Services:
 | `CELERY_BROKER_URL` | Celery broker URL | `redis://:redis@localhost:6379/0` |
 | `CELERY_RESULT_BACKEND` | Celery result backend | `redis://:redis@localhost:6379/1` |
 | `JWT_SECRET` | JWT signing secret | Required |
+| `SESSION_TOKEN_HASH_SECRET` | HMAC secret for refresh-session token hashes | Falls back to `API_KEY_HASH_SECRET`/`JWT_SECRET` |
 | `JWT_ALGORITHM` | JWT algorithm | `HS256` |
 | `JWT_ACCESS_TTL_MINUTES` | Access token TTL | `15` |
 | `JWT_REFRESH_TTL_DAYS` | Refresh token TTL | `30` |
 | `TOTP_ISSUER` | TOTP issuer name | `starter_template` |
 | `TOTP_ENCRYPTION_KEY` | TOTP secret encryption key | Required |
+| `TRUSTED_HOSTS` | Comma-separated allowed Host header values for production | Required in production |
 | `OTEL_ENABLED` | Enable OpenTelemetry | `false` |
 | `OTEL_SERVICE_NAME` | Service name for tracing | `starter_template` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint | - |
@@ -206,11 +208,15 @@ Complete this checklist before forking or deploying this starter to production:
 
 - Set `ENVIRONMENT=production` so missing or weak core secrets fail startup.
 - Generate unique `SECRET_KEY`, `JWT_SECRET`, `API_KEY_HASH_SECRET`, and `TOTP_ENCRYPTION_KEY`; do not reuse example values.
+- Prefer a separate `SESSION_TOKEN_HASH_SECRET` for refresh-session HMACs; if you rotate it, expire or migrate existing sessions.
 - Store secrets in OpenBao or another secret manager, and document JWT/API-key hash secret rotation.
+- Set `TRUSTED_HOSTS` to the public hostnames accepted by the deployment.
 - Keep `REFRESH_COOKIE_SECURE=true`, set an appropriate `REFRESH_COOKIE_DOMAIN`, and only serve auth flows over HTTPS.
 - Set `TRUSTED_PROXY_CIDRS` and `FORWARDED_ALLOW_IPS` to the exact proxy/load-balancer CIDRs that may send `X-Forwarded-*` headers.
 - Run `alembic upgrade head` as a release step before starting new application containers.
 - Confirm PostgreSQL and Redis health checks pass before app, worker, and beat services start.
+- Run exactly one Celery Beat instance per environment; multiple beat replicas will enqueue duplicate scheduled tasks.
+- Treat `WebSocketManager` as single-process only. Use Redis pub/sub or another broker before scaling WebSocket workers horizontally.
 - Set `METRICS_TOKEN` unless `/metrics` is exposed only on loopback or a private monitoring network.
 - Review `CORS_ORIGINS`, SMTP settings, storage backend settings, and upload size/type limits for the target environment.
 - Build and scan the container image, publish the generated SBOM, and block deployment on high or critical dependency/image CVEs.

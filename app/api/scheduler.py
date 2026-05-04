@@ -14,6 +14,16 @@ from app.services.exceptions import BadRequestError, NotFoundError
 router = APIRouter(prefix="/scheduler", tags=["scheduler"])
 
 
+def _commit(db: Session) -> None:
+    db.commit()
+
+
+def _commit_and_refresh(db: Session, result):
+    _commit(db)
+    db.refresh(result)
+    return result
+
+
 def _to_http_error(exc: Exception) -> HTTPException:
     if isinstance(exc, NotFoundError):
         return HTTPException(status_code=404, detail=str(exc))
@@ -30,8 +40,8 @@ def list_scheduled_tasks(
     db: Session = Depends(get_db),
 ):
     try:
-        return scheduler_service.scheduled_tasks.list_response(
-            db, enabled, order_by, order_dir, limit, offset
+        return scheduler_service.ScheduledTasks(db).list_response(
+            enabled, order_by, order_dir, limit, offset
         )
     except BadRequestError as exc:
         raise _to_http_error(exc) from exc
@@ -44,18 +54,16 @@ def list_scheduled_tasks(
 )
 def create_scheduled_task(payload: ScheduledTaskCreate, db: Session = Depends(get_db)):
     try:
-        task = scheduler_service.scheduled_tasks.create(db, payload)
+        task = scheduler_service.ScheduledTasks(db).create(payload)
     except BadRequestError as exc:
         raise _to_http_error(exc) from exc
-    db.commit()
-    db.refresh(task)
-    return task
+    return _commit_and_refresh(db, task)
 
 
 @router.get("/tasks/{task_id}", response_model=ScheduledTaskRead)
 def get_scheduled_task(task_id: str, db: Session = Depends(get_db)):
     try:
-        return scheduler_service.scheduled_tasks.get(db, task_id)
+        return scheduler_service.ScheduledTasks(db).get(task_id)
     except NotFoundError as exc:
         raise _to_http_error(exc) from exc
 
@@ -65,21 +73,19 @@ def update_scheduled_task(
     task_id: str, payload: ScheduledTaskUpdate, db: Session = Depends(get_db)
 ):
     try:
-        task = scheduler_service.scheduled_tasks.update(db, task_id, payload)
+        task = scheduler_service.ScheduledTasks(db).update(task_id, payload)
     except (BadRequestError, NotFoundError) as exc:
         raise _to_http_error(exc) from exc
-    db.commit()
-    db.refresh(task)
-    return task
+    return _commit_and_refresh(db, task)
 
 
 @router.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_scheduled_task(task_id: str, db: Session = Depends(get_db)):
     try:
-        scheduler_service.scheduled_tasks.delete(db, task_id)
+        scheduler_service.ScheduledTasks(db).delete(task_id)
     except NotFoundError as exc:
         raise _to_http_error(exc) from exc
-    db.commit()
+    _commit(db)
 
 
 @router.post("/tasks/refresh", status_code=status.HTTP_200_OK)
@@ -90,7 +96,7 @@ def refresh_schedule():
 @router.post("/tasks/{task_id}/enqueue", status_code=status.HTTP_202_ACCEPTED)
 def enqueue_scheduled_task(task_id: str, db: Session = Depends(get_db)):
     try:
-        task = scheduler_service.scheduled_tasks.get(db, task_id)
+        task = scheduler_service.ScheduledTasks(db).get(task_id)
     except NotFoundError as exc:
         raise _to_http_error(exc) from exc
     return scheduler_service.enqueue_task(

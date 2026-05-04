@@ -20,24 +20,24 @@ from app.services.response import ListResponseMixin
 
 
 class Roles(ListResponseMixin):
-    @staticmethod
-    def create(db: Session, payload: RoleCreate):
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def create(self, payload: RoleCreate):
         role = Role(**payload.model_dump())
-        db.add(role)
-        db.flush()
-        db.refresh(role)
+        self.db.add(role)
+        self.db.flush()
+        self.db.refresh(role)
         return role
 
-    @staticmethod
-    def get(db: Session, role_id: str):
-        role = db.get(Role, coerce_uuid(role_id))
+    def get(self, role_id: str):
+        role = self.db.get(Role, coerce_uuid(role_id))
         if not role:
             raise NotFoundError("Role not found")
         return role
 
-    @staticmethod
     def list(
-        db: Session,
+        self,
         is_active: bool | None,
         order_by: str,
         order_dir: str,
@@ -55,47 +55,45 @@ class Roles(ListResponseMixin):
             order_dir,
             {"created_at": Role.created_at, "name": Role.name},
         )
-        return list(db.scalars(apply_pagination(query, limit, offset)).all())
+        return list(self.db.scalars(apply_pagination(query, limit, offset)).all())
 
-    @staticmethod
-    def update(db: Session, role_id: str, payload: RoleUpdate):
-        role = db.get(Role, coerce_uuid(role_id))
+    def update(self, role_id: str, payload: RoleUpdate):
+        role = self.db.get(Role, coerce_uuid(role_id))
         if not role:
             raise NotFoundError("Role not found")
         for key, value in payload.model_dump(exclude_unset=True).items():
             setattr(role, key, value)
-        db.flush()
-        db.refresh(role)
+        self.db.flush()
+        self.db.refresh(role)
         return role
 
-    @staticmethod
-    def delete(db: Session, role_id: str):
-        role = db.get(Role, coerce_uuid(role_id))
+    def delete(self, role_id: str):
+        role = self.db.get(Role, coerce_uuid(role_id))
         if not role:
             raise NotFoundError("Role not found")
         role.is_active = False
-        db.flush()
+        self.db.flush()
 
 
 class Permissions(ListResponseMixin):
-    @staticmethod
-    def create(db: Session, payload: PermissionCreate):
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def create(self, payload: PermissionCreate):
         permission = Permission(**payload.model_dump())
-        db.add(permission)
-        db.flush()
-        db.refresh(permission)
+        self.db.add(permission)
+        self.db.flush()
+        self.db.refresh(permission)
         return permission
 
-    @staticmethod
-    def get(db: Session, permission_id: str):
-        permission = db.get(Permission, coerce_uuid(permission_id))
+    def get(self, permission_id: str):
+        permission = self.db.get(Permission, coerce_uuid(permission_id))
         if not permission:
             raise NotFoundError("Permission not found")
         return permission
 
-    @staticmethod
     def list(
-        db: Session,
+        self,
         is_active: bool | None,
         order_by: str,
         order_dir: str,
@@ -113,53 +111,51 @@ class Permissions(ListResponseMixin):
             order_dir,
             {"created_at": Permission.created_at, "key": Permission.key},
         )
-        return list(db.scalars(apply_pagination(query, limit, offset)).all())
+        return list(self.db.scalars(apply_pagination(query, limit, offset)).all())
 
-    @staticmethod
-    def update(db: Session, permission_id: str, payload: PermissionUpdate):
-        permission = db.get(Permission, coerce_uuid(permission_id))
+    def update(self, permission_id: str, payload: PermissionUpdate):
+        permission = self.db.get(Permission, coerce_uuid(permission_id))
         if not permission:
             raise NotFoundError("Permission not found")
         for key, value in payload.model_dump(exclude_unset=True).items():
             setattr(permission, key, value)
-        db.flush()
-        db.refresh(permission)
+        self.db.flush()
+        self.db.refresh(permission)
         return permission
 
-    @staticmethod
-    def delete(db: Session, permission_id: str):
-        permission = db.get(Permission, coerce_uuid(permission_id))
+    def delete(self, permission_id: str):
+        permission = self.db.get(Permission, coerce_uuid(permission_id))
         if not permission:
             raise NotFoundError("Permission not found")
         permission.is_active = False
-        db.flush()
+        self.db.flush()
 
 
 class RolePermissions(ListResponseMixin):
-    @staticmethod
-    def create(db: Session, payload: RolePermissionCreate):
-        role = db.get(Role, coerce_uuid(payload.role_id))
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def create(self, payload: RolePermissionCreate):
+        role = self.db.get(Role, coerce_uuid(payload.role_id))
         if not role:
             raise NotFoundError("Role not found")
-        permission = db.get(Permission, coerce_uuid(payload.permission_id))
+        permission = self.db.get(Permission, coerce_uuid(payload.permission_id))
         if not permission:
             raise NotFoundError("Permission not found")
         link = RolePermission(**payload.model_dump())
-        db.add(link)
-        db.flush()
-        db.refresh(link)
+        self.db.add(link)
+        self.db.flush()
+        self.db.refresh(link)
         return link
 
-    @staticmethod
-    def get(db: Session, link_id: str):
-        link = db.get(RolePermission, coerce_uuid(link_id))
+    def get(self, link_id: str):
+        link = self.db.get(RolePermission, coerce_uuid(link_id))
         if not link:
             raise NotFoundError("Role permission not found")
         return link
 
-    @staticmethod
     def list(
-        db: Session,
+        self,
         role_id: str | None,
         permission_id: str | None,
         order_by: str,
@@ -180,62 +176,60 @@ class RolePermissions(ListResponseMixin):
             order_dir,
             {"role_id": RolePermission.role_id},
         )
-        return list(db.scalars(apply_pagination(query, limit, offset)).all())
+        return list(self.db.scalars(apply_pagination(query, limit, offset)).all())
 
-    @staticmethod
-    def update(db: Session, link_id: str, payload: RolePermissionUpdate):
-        link = db.get(RolePermission, coerce_uuid(link_id))
+    def update(self, link_id: str, payload: RolePermissionUpdate):
+        link = self.db.get(RolePermission, coerce_uuid(link_id))
         if not link:
             raise NotFoundError("Role permission not found")
         data = payload.model_dump(exclude_unset=True)
         if "role_id" in data:
-            role = db.get(Role, data["role_id"])
+            role = self.db.get(Role, data["role_id"])
             if not role:
                 raise NotFoundError("Role not found")
         if "permission_id" in data:
-            permission = db.get(Permission, data["permission_id"])
+            permission = self.db.get(Permission, data["permission_id"])
             if not permission:
                 raise NotFoundError("Permission not found")
         for key, value in data.items():
             setattr(link, key, value)
-        db.flush()
-        db.refresh(link)
+        self.db.flush()
+        self.db.refresh(link)
         return link
 
-    @staticmethod
-    def delete(db: Session, link_id: str):
-        link = db.get(RolePermission, coerce_uuid(link_id))
+    def delete(self, link_id: str):
+        link = self.db.get(RolePermission, coerce_uuid(link_id))
         if not link:
             raise NotFoundError("Role permission not found")
-        db.delete(link)
-        db.flush()
+        self.db.delete(link)
+        self.db.flush()
 
 
 class PersonRoles(ListResponseMixin):
-    @staticmethod
-    def create(db: Session, payload: PersonRoleCreate):
-        person = db.get(Person, coerce_uuid(payload.person_id))
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def create(self, payload: PersonRoleCreate):
+        person = self.db.get(Person, coerce_uuid(payload.person_id))
         if not person:
             raise NotFoundError("Person not found")
-        role = db.get(Role, coerce_uuid(payload.role_id))
+        role = self.db.get(Role, coerce_uuid(payload.role_id))
         if not role:
             raise NotFoundError("Role not found")
         link = PersonRole(**payload.model_dump())
-        db.add(link)
-        db.flush()
-        db.refresh(link)
+        self.db.add(link)
+        self.db.flush()
+        self.db.refresh(link)
         return link
 
-    @staticmethod
-    def get(db: Session, link_id: str):
-        link = db.get(PersonRole, coerce_uuid(link_id))
+    def get(self, link_id: str):
+        link = self.db.get(PersonRole, coerce_uuid(link_id))
         if not link:
             raise NotFoundError("Person role not found")
         return link
 
-    @staticmethod
     def list(
-        db: Session,
+        self,
         person_id: str | None,
         role_id: str | None,
         order_by: str,
@@ -254,38 +248,30 @@ class PersonRoles(ListResponseMixin):
             order_dir,
             {"assigned_at": PersonRole.assigned_at},
         )
-        return list(db.scalars(apply_pagination(query, limit, offset)).all())
+        return list(self.db.scalars(apply_pagination(query, limit, offset)).all())
 
-    @staticmethod
-    def update(db: Session, link_id: str, payload: PersonRoleUpdate):
-        link = db.get(PersonRole, coerce_uuid(link_id))
+    def update(self, link_id: str, payload: PersonRoleUpdate):
+        link = self.db.get(PersonRole, coerce_uuid(link_id))
         if not link:
             raise NotFoundError("Person role not found")
         data = payload.model_dump(exclude_unset=True)
         if "person_id" in data:
-            person = db.get(Person, data["person_id"])
+            person = self.db.get(Person, data["person_id"])
             if not person:
                 raise NotFoundError("Person not found")
         if "role_id" in data:
-            role = db.get(Role, data["role_id"])
+            role = self.db.get(Role, data["role_id"])
             if not role:
                 raise NotFoundError("Role not found")
         for key, value in data.items():
             setattr(link, key, value)
-        db.flush()
-        db.refresh(link)
+        self.db.flush()
+        self.db.refresh(link)
         return link
 
-    @staticmethod
-    def delete(db: Session, link_id: str):
-        link = db.get(PersonRole, coerce_uuid(link_id))
+    def delete(self, link_id: str):
+        link = self.db.get(PersonRole, coerce_uuid(link_id))
         if not link:
             raise NotFoundError("Person role not found")
-        db.delete(link)
-        db.flush()
-
-
-roles = Roles()
-permissions = Permissions()
-role_permissions = RolePermissions()
-person_roles = PersonRoles()
+        self.db.delete(link)
+        self.db.flush()

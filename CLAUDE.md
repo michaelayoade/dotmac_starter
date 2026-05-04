@@ -6,7 +6,9 @@ Port 8001. Plugin: `frontend-design`.
 ## Non-Negotiable Rules
 - SQLAlchemy 2.0: `select()` + `scalars()`, never `db.query()`
 - `db.flush()` in services, NOT `db.commit()` — routes commit
+- Services raise `DomainError` subclasses from `app.services.exceptions`; routes should let app-level handlers translate them unless a route has a documented response-shape exception
 - Routes are thin wrappers — no business logic inside
+- Write routes use `_commit()` for delete/void operations and `_commit_and_refresh()` for create/update operations that return ORM models
 - SQLite in-memory for tests
 - Commands: always `poetry run ruff`, `poetry run mypy`, `poetry run pytest`
 

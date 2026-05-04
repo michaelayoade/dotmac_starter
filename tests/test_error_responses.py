@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import pytest
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from app.errors import register_error_handlers
 from app.observability import ObservabilityMiddleware
+from app.services.exceptions import (
+    ConflictError,
+    RateLimitError,
+    ServiceUnavailableError,
+)
 
 
 @pytest.fixture
@@ -38,6 +43,18 @@ def app_with_errors() -> FastAPI:
     @app.get("/crash")
     def crash():
         raise RuntimeError("boom")
+
+    @app.get("/conflict")
+    def conflict():
+        raise ConflictError("already exists")
+
+    @app.get("/rate-limited")
+    def rate_limited():
+        raise RateLimitError("slow down")
+
+    @app.get("/service-unavailable")
+    def service_unavailable():
+        raise ServiceUnavailableError("dependency down")
 
     return app
 
@@ -85,3 +102,18 @@ class TestErrorResponses:
         resp = client.get("/ok")
         assert resp.status_code == 200
         assert "x-request-id" in resp.headers
+
+    @pytest.mark.parametrize(
+        ("path", "status_code", "code"),
+        [
+            ("/conflict", 409, "conflict"),
+            ("/rate-limited", 429, "rate_limited"),
+            ("/service-unavailable", 503, "service_unavailable"),
+        ],
+    )
+    def test_domain_errors_map_to_http_status(
+        self, client: TestClient, path: str, status_code: int, code: str
+    ) -> None:
+        resp = client.get(path)
+        assert resp.status_code == status_code
+        assert resp.json()["code"] == code

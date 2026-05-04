@@ -7,6 +7,7 @@ from jose import JWTError, jwt
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
+from app.logging import set_log_context
 from app.metrics import REQUEST_COUNT, REQUEST_ERRORS, REQUEST_LATENCY
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,7 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
         actor_id = getattr(
             request.state, "actor_id", None
         ) or _extract_actor_id_from_jwt(token)
+        set_log_context(request_id=request_id, actor_id=actor_id)
         start = time.monotonic()
         status_code = 500
         try:
@@ -88,6 +90,7 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
                     "duration_ms": round(duration_ms, 2),
                 },
             )
+            set_log_context()
             raise
         duration_ms = (time.monotonic() - start) * 1000.0
         path = _request_path(request)
@@ -109,4 +112,5 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
             },
         )
         response.headers["x-request-id"] = request_id
+        set_log_context()
         return response

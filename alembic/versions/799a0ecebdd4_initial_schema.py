@@ -6,8 +6,9 @@ Create Date: 2026-01-09 07:31:51.528180
 
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "799a0ecebdd4"
 down_revision = None
@@ -208,7 +209,7 @@ def upgrade() -> None:
     op.create_table(
         "domain_settings",
         sa.Column("id", sa.UUID(), nullable=False),
-        sa.Column("domain", sa.Enum("auth", "audit", "scheduler", name="settingdomain"), nullable=False),
+        sa.Column("domain", sa.Enum("auth", "audit", "scheduler", "billing", "branding", name="settingdomain"), nullable=False),
         sa.Column("key", sa.String(length=120), nullable=False),
         sa.Column("value_type", sa.Enum("string", "integer", "boolean", "json", name="settingvaluetype"), nullable=False),
         sa.Column("value_text", sa.Text(), nullable=True),

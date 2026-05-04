@@ -15,7 +15,7 @@ from app.models.rbac import Permission, Role, RolePermission
 from app.schemas.rbac import RoleCreate, RolePermissionCreate, RoleUpdate
 from app.services.branding_context import load_branding_context
 from app.services.common import coerce_uuid
-from app.services.rbac import role_permissions, roles
+from app.services.rbac import RolePermissions, Roles
 from app.templates import templates
 from app.web.deps import require_web_auth
 
@@ -24,6 +24,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin/roles", tags=["web-roles"])
 
 PAGE_SIZE = 25
+
+
+def _commit(db: Session) -> None:
+    db.commit()
 
 
 def _base_context(
@@ -121,7 +125,9 @@ async def create_role_submit(
             description=str(data["description"]) if data.get("description") else None,
             is_active=data.get("is_active") == "on",
         )
-        role = roles.create(db, payload)
+        roles = Roles(db)
+        role_permissions = RolePermissions(db)
+        role = roles.create(payload)
 
         # Assign permissions to the role
         for perm_id in permission_ids:
@@ -132,9 +138,9 @@ async def create_role_submit(
                 role_id=role.id,
                 permission_id=perm_uuid,
             )
-            role_permissions.create(db, rp_payload)
+            role_permissions.create(rp_payload)
 
-        db.commit()
+        _commit(db)
         logger.info("Created role via web: %s", payload.name)
         return RedirectResponse(
             url="/admin/roles?success=Role+created+successfully",
@@ -166,7 +172,7 @@ def edit_role_form(
     auth: dict = Depends(require_web_auth),
 ) -> HTMLResponse:
     """Render the edit role form with permission checkboxes."""
-    role = roles.get(db, str(role_id))
+    role = Roles(db).get(str(role_id))
     all_permissions = list(
         db.scalars(
             select(Permission)
@@ -207,7 +213,9 @@ async def edit_role_submit(
             description=str(data["description"]) if data.get("description") else None,
             is_active="is_active" in data,
         )
-        roles.update(db, str(role_id), payload)
+        roles = Roles(db)
+        role_permissions = RolePermissions(db)
+        roles.update(str(role_id), payload)
 
         # Remove existing role permissions
         existing_rps = list(
@@ -228,9 +236,9 @@ async def edit_role_submit(
                 role_id=role_id,
                 permission_id=perm_uuid,
             )
-            role_permissions.create(db, rp_payload)
+            role_permissions.create(rp_payload)
 
-        db.commit()
+        _commit(db)
         logger.info("Updated role via web: %s", role_id)
         return RedirectResponse(
             url="/admin/roles?success=Role+updated+successfully",
@@ -274,8 +282,8 @@ async def delete_role(
     _ = form.get("csrf_token")
 
     try:
-        roles.delete(db, str(role_id))
-        db.commit()
+        Roles(db).delete(str(role_id))
+        _commit(db)
         logger.info("Deleted role via web: %s", role_id)
         return RedirectResponse(
             url="/admin/roles?success=Role+deleted+successfully",

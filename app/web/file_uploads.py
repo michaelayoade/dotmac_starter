@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import quote_plus
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request, UploadFile
@@ -177,13 +178,13 @@ async def delete_file_upload(
     except ValueError as exc:
         logger.warning("Failed to delete file upload %s: %s", file_id, exc)
         return RedirectResponse(
-            url=f"/admin/file-uploads?error={exc}",
+            url=f"/admin/file-uploads?error={quote_plus(str(exc))}",
             status_code=302,
         )
     except Exception as exc:
         logger.exception("Failed to delete file upload %s: %s", file_id, exc)
         db.rollback()
         return RedirectResponse(
-            url=f"/admin/file-uploads?error={exc}",
+            url=f"/admin/file-uploads?error={quote_plus(str(exc))}",
             status_code=302,
         )

@@ -42,8 +42,12 @@ def _to_http_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=400, detail=str(exc))
 
 
-def _commit_result(db: Session, result):
+def _commit(db: Session) -> None:
     db.commit()
+
+
+def _commit_and_refresh(db: Session, result):
+    _commit(db)
     if result is not None:
         db.refresh(result)
     return result
@@ -59,7 +63,7 @@ def create_user_credential(
     payload: UserCredentialCreate, db: Session = Depends(get_db)
 ):
     try:
-        return _commit_result(db, auth_service.user_credentials.create(db, payload))
+        return _commit_and_refresh(db, auth_service.UserCredentials(db).create(payload))
     except (NotFoundError, ServiceUnavailableError) as exc:
         raise _to_http_error(exc) from exc
 
@@ -71,7 +75,7 @@ def create_user_credential(
 )
 def get_user_credential(credential_id: str, db: Session = Depends(get_db)):
     try:
-        return auth_service.user_credentials.get(db, credential_id)
+        return auth_service.UserCredentials(db).get(credential_id)
     except NotFoundError as exc:
         raise _to_http_error(exc) from exc
 
@@ -91,8 +95,8 @@ def list_user_credentials(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
-    return auth_service.user_credentials.list_response(
-        db, person_id, provider, is_active, order_by, order_dir, limit, offset
+    return auth_service.UserCredentials(db).list_response(
+        person_id, provider, is_active, order_by, order_dir, limit, offset
     )
 
 
@@ -105,8 +109,8 @@ def update_user_credential(
     credential_id: str, payload: UserCredentialUpdate, db: Session = Depends(get_db)
 ):
     try:
-        return _commit_result(
-            db, auth_service.user_credentials.update(db, credential_id, payload)
+        return _commit_and_refresh(
+            db, auth_service.UserCredentials(db).update(credential_id, payload)
         )
     except NotFoundError as exc:
         raise _to_http_error(exc) from exc
@@ -119,10 +123,10 @@ def update_user_credential(
 )
 def delete_user_credential(credential_id: str, db: Session = Depends(get_db)):
     try:
-        auth_service.user_credentials.delete(db, credential_id)
+        auth_service.UserCredentials(db).delete(credential_id)
     except NotFoundError as exc:
         raise _to_http_error(exc) from exc
-    db.commit()
+    _commit(db)
 
 
 @router.post(
@@ -133,7 +137,7 @@ def delete_user_credential(credential_id: str, db: Session = Depends(get_db)):
 )
 def create_mfa_method(payload: MFAMethodCreate, db: Session = Depends(get_db)):
     try:
-        return _commit_result(db, auth_service.mfa_methods.create(db, payload))
+        return _commit_and_refresh(db, auth_service.MFAMethods(db).create(payload))
     except (NotFoundError, ConflictError) as exc:
         raise _to_http_error(exc) from exc
 
@@ -145,7 +149,7 @@ def create_mfa_method(payload: MFAMethodCreate, db: Session = Depends(get_db)):
 )
 def get_mfa_method(method_id: str, db: Session = Depends(get_db)):
     try:
-        return auth_service.mfa_methods.get(db, method_id)
+        return auth_service.MFAMethods(db).get(method_id)
     except NotFoundError as exc:
         raise _to_http_error(exc) from exc
 
@@ -167,8 +171,7 @@ def list_mfa_methods(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
-    return auth_service.mfa_methods.list_response(
-        db,
+    return auth_service.MFAMethods(db).list_response(
         person_id,
         method_type,
         is_primary,
@@ -190,8 +193,8 @@ def update_mfa_method(
     method_id: str, payload: MFAMethodUpdate, db: Session = Depends(get_db)
 ):
     try:
-        return _commit_result(
-            db, auth_service.mfa_methods.update(db, method_id, payload)
+        return _commit_and_refresh(
+            db, auth_service.MFAMethods(db).update(method_id, payload)
         )
     except (NotFoundError, ConflictError) as exc:
         raise _to_http_error(exc) from exc
@@ -204,10 +207,10 @@ def update_mfa_method(
 )
 def delete_mfa_method(method_id: str, db: Session = Depends(get_db)):
     try:
-        auth_service.mfa_methods.delete(db, method_id)
+        auth_service.MFAMethods(db).delete(method_id)
     except NotFoundError as exc:
         raise _to_http_error(exc) from exc
-    db.commit()
+    _commit(db)
 
 
 @router.post(
@@ -218,7 +221,7 @@ def delete_mfa_method(method_id: str, db: Session = Depends(get_db)):
 )
 def create_session(payload: SessionCreate, db: Session = Depends(get_db)):
     try:
-        return _commit_result(db, auth_service.sessions.create(db, payload))
+        return _commit_and_refresh(db, auth_service.Sessions(db).create(payload))
     except NotFoundError as exc:
         raise _to_http_error(exc) from exc
 
@@ -230,7 +233,7 @@ def create_session(payload: SessionCreate, db: Session = Depends(get_db)):
 )
 def get_session(session_id: str, db: Session = Depends(get_db)):
     try:
-        return auth_service.sessions.get(db, session_id)
+        return auth_service.Sessions(db).get(session_id)
     except NotFoundError as exc:
         raise _to_http_error(exc) from exc
 
@@ -249,8 +252,8 @@ def list_sessions(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
-    return auth_service.sessions.list_response(
-        db, person_id, status, order_by, order_dir, limit, offset
+    return auth_service.Sessions(db).list_response(
+        person_id, status, order_by, order_dir, limit, offset
     )
 
 
@@ -263,7 +266,9 @@ def update_session(
     session_id: str, payload: SessionUpdate, db: Session = Depends(get_db)
 ):
     try:
-        return _commit_result(db, auth_service.sessions.update(db, session_id, payload))
+        return _commit_and_refresh(
+            db, auth_service.Sessions(db).update(session_id, payload)
+        )
     except NotFoundError as exc:
         raise _to_http_error(exc) from exc
 
@@ -275,10 +280,10 @@ def update_session(
 )
 def delete_session(session_id: str, db: Session = Depends(get_db)):
     try:
-        auth_service.sessions.delete(db, session_id)
+        auth_service.Sessions(db).delete(session_id)
     except NotFoundError as exc:
         raise _to_http_error(exc) from exc
-    db.commit()
+    _commit(db)
 
 
 @router.post(
@@ -289,7 +294,7 @@ def delete_session(session_id: str, db: Session = Depends(get_db)):
 )
 def create_api_key(payload: ApiKeyCreate, db: Session = Depends(get_db)):
     try:
-        return _commit_result(db, auth_service.api_keys.create(db, payload))
+        return _commit_and_refresh(db, auth_service.ApiKeys(db).create(payload))
     except (NotFoundError, ServiceUnavailableError) as exc:
         raise _to_http_error(exc) from exc
 
@@ -306,14 +311,14 @@ def generate_api_key(
     db: Session = Depends(get_db),
 ):
     try:
-        result = auth_service.api_keys.generate_with_rate_limit(db, payload, request)
+        result = auth_service.ApiKeys(db).generate_with_rate_limit(payload, request)
     except (
         NotFoundError,
         RateLimitError,
         ServiceUnavailableError,
     ) as exc:
         raise _to_http_error(exc) from exc
-    db.commit()
+    _commit(db)
     db.refresh(result["api_key"])
     return result
 
@@ -325,7 +330,7 @@ def generate_api_key(
 )
 def get_api_key(key_id: str, db: Session = Depends(get_db)):
     try:
-        return auth_service.api_keys.get(db, key_id)
+        return auth_service.ApiKeys(db).get(key_id)
     except NotFoundError as exc:
         raise _to_http_error(exc) from exc
 
@@ -344,8 +349,8 @@ def list_api_keys(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
-    return auth_service.api_keys.list_response(
-        db, person_id, is_active, order_by, order_dir, limit, offset
+    return auth_service.ApiKeys(db).list_response(
+        person_id, is_active, order_by, order_dir, limit, offset
     )
 
 
@@ -356,7 +361,7 @@ def list_api_keys(
 )
 def update_api_key(key_id: str, payload: ApiKeyUpdate, db: Session = Depends(get_db)):
     try:
-        return _commit_result(db, auth_service.api_keys.update(db, key_id, payload))
+        return _commit_and_refresh(db, auth_service.ApiKeys(db).update(key_id, payload))
     except (NotFoundError, ServiceUnavailableError) as exc:
         raise _to_http_error(exc) from exc
 
@@ -368,7 +373,7 @@ def update_api_key(key_id: str, payload: ApiKeyUpdate, db: Session = Depends(get
 )
 def delete_api_key(key_id: str, db: Session = Depends(get_db)):
     try:
-        auth_service.api_keys.revoke(db, key_id)
+        auth_service.ApiKeys(db).revoke(key_id)
     except NotFoundError as exc:
         raise _to_http_error(exc) from exc
-    db.commit()
+    _commit(db)

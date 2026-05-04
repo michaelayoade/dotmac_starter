@@ -9,16 +9,17 @@ from app.services import rbac as rbac_service
 
 
 def test_role_permission_link_flow(db_session):
-    role = rbac_service.roles.create(db_session, RoleCreate(name="Support"))
-    permission = rbac_service.permissions.create(
-        db_session, PermissionCreate(key="people:read", description="Read People")
+    roles = rbac_service.Roles(db_session)
+    permissions = rbac_service.Permissions(db_session)
+    role_permissions = rbac_service.RolePermissions(db_session)
+    role = roles.create(RoleCreate(name="Support"))
+    permission = permissions.create(
+        PermissionCreate(key="people:read", description="Read People")
     )
-    link = rbac_service.role_permissions.create(
-        db_session,
+    link = role_permissions.create(
         RolePermissionCreate(role_id=role.id, permission_id=permission.id),
     )
-    items = rbac_service.role_permissions.list(
-        db_session,
+    items = role_permissions.list(
         role_id=role.id,
         permission_id=None,
         order_by="role_id",
@@ -30,19 +31,18 @@ def test_role_permission_link_flow(db_session):
 
 
 def test_role_permission_soft_delete_filters(db_session):
-    role = rbac_service.roles.create(db_session, RoleCreate(name="Settings"))
-    rbac_service.roles.update(db_session, str(role.id), RoleUpdate(name="Settings Ops"))
-    rbac_service.roles.delete(db_session, str(role.id))
-    active = rbac_service.roles.list(
-        db_session,
+    roles = rbac_service.Roles(db_session)
+    role = roles.create(RoleCreate(name="Settings"))
+    roles.update(str(role.id), RoleUpdate(name="Settings Ops"))
+    roles.delete(str(role.id))
+    active = roles.list(
         is_active=None,
         order_by="created_at",
         order_dir="desc",
         limit=10,
         offset=0,
     )
-    inactive = rbac_service.roles.list(
-        db_session,
+    inactive = roles.list(
         is_active=False,
         order_by="created_at",
         order_dir="desc",
@@ -54,11 +54,11 @@ def test_role_permission_soft_delete_filters(db_session):
 
 
 def test_permission_update(db_session):
-    permission = rbac_service.permissions.create(
-        db_session, PermissionCreate(key="settings:write", description="Settings Write")
+    permissions = rbac_service.Permissions(db_session)
+    permission = permissions.create(
+        PermissionCreate(key="settings:write", description="Settings Write")
     )
-    updated = rbac_service.permissions.update(
-        db_session,
+    updated = permissions.update(
         str(permission.id),
         PermissionUpdate(description="Settings Write Access"),
     )

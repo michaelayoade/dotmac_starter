@@ -1,11 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, require_audit_auth
+from app.api.deps import get_db, require_audit_auth, require_role
 from app.schemas.audit import AuditEventRead
 from app.schemas.common import ListResponse
 from app.services import audit as audit_service
-from app.services.exceptions import BadRequestError, NotFoundError
 
 router = APIRouter(
     prefix="/audit-events",
@@ -16,10 +15,7 @@ router = APIRouter(
 
 @router.get("/{event_id}", response_model=AuditEventRead)
 def get_audit_event(event_id: str, db: Session = Depends(get_db)):
-    try:
-        return audit_service.audit_events.get(db, event_id)
-    except NotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return audit_service.audit_events.get(db, event_id)
 
 
 @router.get("", response_model=ListResponse[AuditEventRead])
@@ -38,37 +34,32 @@ def list_audit_events(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
-    try:
-        resolved_actor_type = audit_service.audit_events.parse_actor_type(actor_type)
-    except BadRequestError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    try:
-        return audit_service.audit_events.list_response(
-            db,
-            actor_id,
-            resolved_actor_type,
-            action,
-            entity_type,
-            request_id,
-            is_success,
-            status_code,
-            is_active,
-            order_by,
-            order_dir,
-            limit,
-            offset,
-        )
-    except BadRequestError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    resolved_actor_type = audit_service.audit_events.parse_actor_type(actor_type)
+    return audit_service.audit_events.list_response(
+        db,
+        actor_id,
+        resolved_actor_type,
+        action,
+        entity_type,
+        request_id,
+        is_success,
+        status_code,
+        is_active,
+        order_by,
+        order_dir,
+        limit,
+        offset,
+    )
 
 
 @router.delete(
     "/{event_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-def delete_audit_event(event_id: str, db: Session = Depends(get_db)):
-    try:
-        audit_service.audit_events.delete(db, event_id)
-    except NotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+def delete_audit_event(
+    event_id: str,
+    db: Session = Depends(get_db),
+    _admin: dict = Depends(require_role("admin")),
+):
+    audit_service.audit_events.delete(db, event_id)
     db.commit()

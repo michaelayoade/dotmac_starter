@@ -1,1 +1,3 @@
-__all__: list[str] = []
+from app.tasks.example import ping
+
+__all__ = ["ping"]

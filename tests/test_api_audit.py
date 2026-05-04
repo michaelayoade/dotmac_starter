@@ -1,6 +1,7 @@
 import uuid
 
 from app.models.audit import AuditActorType, AuditEvent
+from app.models.rbac import PersonRole, Role
 from tests.conftest import _create_access_token
 
 
@@ -165,6 +166,32 @@ class TestAuditEventsAPI:
         """Test deleting an audit event without auth."""
         response = client.delete(f"/audit-events/{audit_event.id}")
         assert response.status_code == 401
+
+    def test_delete_audit_event_requires_admin_role(
+        self, client, db_session, auth_session, audit_event
+    ):
+        """Audit-read users can read events but cannot delete them."""
+        role = db_session.query(Role).filter(Role.name == "auditor").first()
+        if not role:
+            role = Role(name="auditor", is_active=True)
+            db_session.add(role)
+            db_session.flush()
+        db_session.add(PersonRole(person_id=auth_session.person_id, role_id=role.id))
+        db_session.commit()
+        token = _create_access_token(
+            str(auth_session.person_id),
+            str(auth_session.id),
+            roles=["auditor"],
+            scopes=["audit:read"],
+        )
+        headers = {"Authorization": f"Bearer {token}"}
+        read_response = client.get(f"/audit-events/{audit_event.id}", headers=headers)
+        assert read_response.status_code == 200
+        response = client.delete(
+            f"/audit-events/{audit_event.id}",
+            headers=headers,
+        )
+        assert response.status_code == 403
 
 
 class TestAuditEventsAPIV1:

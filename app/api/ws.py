@@ -23,8 +23,10 @@ def _authenticate_ws(token: str) -> str | None:
     db: Session = SessionLocal()
     try:
         payload = decode_access_token(db, token)
-        return payload.get("sub")
+        person_id = payload.get("sub")
+        return str(person_id) if person_id else None
     except Exception:
+        logger.exception("WebSocket authentication failed")
         return None
     finally:
         db.close()
@@ -57,7 +59,7 @@ async def ws_notifications(websocket: WebSocket) -> None:
     from uuid import UUID
 
     person_id = UUID(person_id_str)
-    await ws_manager.connect(person_id, websocket, subprotocol=token)
+    await ws_manager.connect(person_id, websocket)
     try:
         while True:
             # Keep connection alive; client can send pings
@@ -67,4 +69,5 @@ async def ws_notifications(websocket: WebSocket) -> None:
     except WebSocketDisconnect:
         ws_manager.disconnect(person_id, websocket)
     except Exception:
+        logger.exception("WebSocket connection failed")
         ws_manager.disconnect(person_id, websocket)

@@ -21,26 +21,26 @@ def _validate_schedule_type(value):
 
 
 class ScheduledTasks(ListResponseMixin):
-    @staticmethod
-    def create(db: Session, payload: ScheduledTaskCreate):
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def create(self, payload: ScheduledTaskCreate):
         if payload.interval_seconds < 1:
             raise BadRequestError("interval_seconds must be >= 1")
         task = ScheduledTask(**payload.model_dump())
-        db.add(task)
-        db.flush()
-        db.refresh(task)
+        self.db.add(task)
+        self.db.flush()
+        self.db.refresh(task)
         return task
 
-    @staticmethod
-    def get(db: Session, task_id: str):
-        task = db.get(ScheduledTask, coerce_uuid(task_id))
+    def get(self, task_id: str):
+        task = self.db.get(ScheduledTask, coerce_uuid(task_id))
         if not task:
             raise NotFoundError("Scheduled task not found")
         return task
 
-    @staticmethod
     def list(
-        db: Session,
+        self,
         enabled: bool | None,
         order_by: str,
         order_dir: str,
@@ -56,11 +56,10 @@ class ScheduledTasks(ListResponseMixin):
             order_dir,
             {"created_at": ScheduledTask.created_at, "name": ScheduledTask.name},
         )
-        return db.scalars(apply_pagination(query, limit, offset)).all()
+        return self.db.scalars(apply_pagination(query, limit, offset)).all()
 
-    @staticmethod
-    def update(db: Session, task_id: str, payload: ScheduledTaskUpdate):
-        task = db.get(ScheduledTask, coerce_uuid(task_id))
+    def update(self, task_id: str, payload: ScheduledTaskUpdate):
+        task = self.db.get(ScheduledTask, coerce_uuid(task_id))
         if not task:
             raise NotFoundError("Scheduled task not found")
         data = payload.model_dump(exclude_unset=True)
@@ -71,20 +70,16 @@ class ScheduledTasks(ListResponseMixin):
                 raise BadRequestError("interval_seconds must be >= 1")
         for key, value in data.items():
             setattr(task, key, value)
-        db.flush()
-        db.refresh(task)
+        self.db.flush()
+        self.db.refresh(task)
         return task
 
-    @staticmethod
-    def delete(db: Session, task_id: str):
-        task = db.get(ScheduledTask, coerce_uuid(task_id))
+    def delete(self, task_id: str):
+        task = self.db.get(ScheduledTask, coerce_uuid(task_id))
         if not task:
             raise NotFoundError("Scheduled task not found")
-        db.delete(task)
-        db.flush()
-
-
-scheduled_tasks = ScheduledTasks()
+        self.db.delete(task)
+        self.db.flush()
 
 
 def refresh_schedule() -> dict:

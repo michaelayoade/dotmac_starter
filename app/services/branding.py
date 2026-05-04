@@ -11,6 +11,7 @@ from app.config import settings
 from app.models.domain_settings import DomainSetting, SettingDomain, SettingValueType
 
 _SETTING_KEY = "ui_branding"
+_SETTING_DOMAIN = SettingDomain.branding
 _HEX_COLOR = re.compile(r"^#[0-9A-Fa-f]{6}$")
 _CSS_URL = re.compile(r"""(?is)url\(\s*(["']?)(.*?)\1\s*\)""")
 _URL_SCHEME = re.compile(r"^([a-zA-Z][a-zA-Z0-9+.-]*):")
@@ -94,7 +95,7 @@ def get_branding(db: Session) -> dict[str, Any]:
     defaults = _default_branding()
     setting = db.scalars(
         select(DomainSetting)
-        .where(DomainSetting.domain == SettingDomain.scheduler)
+        .where(DomainSetting.domain == _SETTING_DOMAIN)
         .where(DomainSetting.key == _SETTING_KEY)
         .limit(1)
     ).first()
@@ -117,13 +118,13 @@ def save_branding(db: Session, payload: dict[str, Any]) -> dict[str, Any]:
 
     setting = db.scalars(
         select(DomainSetting)
-        .where(DomainSetting.domain == SettingDomain.scheduler)
+        .where(DomainSetting.domain == _SETTING_DOMAIN)
         .where(DomainSetting.key == _SETTING_KEY)
         .limit(1)
     ).first()
     if not setting:
         setting = DomainSetting(
-            domain=SettingDomain.scheduler,
+            domain=_SETTING_DOMAIN,
             key=_SETTING_KEY,
             value_type=SettingValueType.json,
             is_secret=False,

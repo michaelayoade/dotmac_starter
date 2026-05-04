@@ -14,7 +14,7 @@ from app.api.deps import get_db
 from app.models.rbac import Permission
 from app.schemas.rbac import PermissionCreate, PermissionUpdate
 from app.services.branding_context import load_branding_context
-from app.services.rbac import permissions
+from app.services.rbac import Permissions
 from app.templates import templates
 from app.web.deps import require_web_auth
 
@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin/permissions", tags=["web-permissions"])
 
 PAGE_SIZE = 25
+
+
+def _commit(db: Session) -> None:
+    db.commit()
 
 
 def _base_context(
@@ -115,8 +119,8 @@ async def create_permission_submit(
             description=str(data["description"]) if data.get("description") else None,
             is_active=data.get("is_active") == "on",
         )
-        permissions.create(db, payload)
-        db.commit()
+        Permissions(db).create(payload)
+        _commit(db)
         logger.info("Created permission via web: %s", payload.key)
         return RedirectResponse(
             url="/admin/permissions?success=Permission+created+successfully",
@@ -144,7 +148,7 @@ def edit_permission_form(
     auth: dict = Depends(require_web_auth),
 ) -> HTMLResponse:
     """Render the edit permission form."""
-    permission = permissions.get(db, str(permission_id))
+    permission = Permissions(db).get(str(permission_id))
     ctx = _base_context(
         request, db, auth, title="Edit Permission", page_title="Edit Permission"
     )
@@ -170,8 +174,8 @@ async def edit_permission_submit(
             description=str(data["description"]) if data.get("description") else None,
             is_active="is_active" in data,
         )
-        permissions.update(db, str(permission_id), payload)
-        db.commit()
+        Permissions(db).update(str(permission_id), payload)
+        _commit(db)
         logger.info("Updated permission via web: %s", permission_id)
         return RedirectResponse(
             url="/admin/permissions?success=Permission+updated+successfully",
@@ -200,8 +204,8 @@ async def delete_permission(
     _ = form.get("csrf_token")
 
     try:
-        permissions.delete(db, str(permission_id))
-        db.commit()
+        Permissions(db).delete(str(permission_id))
+        _commit(db)
         logger.info("Deleted permission via web: %s", permission_id)
         return RedirectResponse(
             url="/admin/permissions?success=Permission+deleted+successfully",

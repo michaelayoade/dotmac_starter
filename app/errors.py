@@ -17,7 +17,13 @@ from fastapi import HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.services.exceptions import BadRequestError, NotFoundError
+from app.services.exceptions import (
+    BadRequestError,
+    ConflictError,
+    NotFoundError,
+    RateLimitError,
+    ServiceUnavailableError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +53,16 @@ def register_error_handlers(app: object) -> None:
             content=_error_payload("bad_request", str(exc), None, request_id),
         )
 
+    @app.exception_handler(ConflictError)  # type: ignore[arg-type]
+    async def conflict_error_handler(
+        request: Request, exc: ConflictError
+    ) -> JSONResponse:
+        request_id = _get_request_id(request)
+        return JSONResponse(
+            status_code=409,
+            content=_error_payload("conflict", str(exc), None, request_id),
+        )
+
     @app.exception_handler(NotFoundError)  # type: ignore[arg-type]
     async def not_found_error_handler(
         request: Request, exc: NotFoundError
@@ -55,6 +71,26 @@ def register_error_handlers(app: object) -> None:
         return JSONResponse(
             status_code=404,
             content=_error_payload("not_found", str(exc), None, request_id),
+        )
+
+    @app.exception_handler(RateLimitError)  # type: ignore[arg-type]
+    async def rate_limit_error_handler(
+        request: Request, exc: RateLimitError
+    ) -> JSONResponse:
+        request_id = _get_request_id(request)
+        return JSONResponse(
+            status_code=429,
+            content=_error_payload("rate_limited", str(exc), None, request_id),
+        )
+
+    @app.exception_handler(ServiceUnavailableError)  # type: ignore[arg-type]
+    async def service_unavailable_error_handler(
+        request: Request, exc: ServiceUnavailableError
+    ) -> JSONResponse:
+        request_id = _get_request_id(request)
+        return JSONResponse(
+            status_code=503,
+            content=_error_payload("service_unavailable", str(exc), None, request_id),
         )
 
     @app.exception_handler(HTTPException)  # type: ignore[arg-type]

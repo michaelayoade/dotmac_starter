@@ -27,14 +27,14 @@ class _FakeRedis:
 
 
 def test_user_credentials_soft_delete(db_session, person):
+    service = auth_service.UserCredentials(db_session)
     payload = UserCredentialCreate(
         person_id=person.id,
         username="user@example.com",
         password_hash=hash_password("secret"),
     )
-    credential = auth_service.user_credentials.create(db_session, payload)
-    active = auth_service.user_credentials.list(
-        db_session,
+    credential = service.create(payload)
+    active = service.list(
         person_id=str(person.id),
         provider=None,
         is_active=None,
@@ -44,9 +44,8 @@ def test_user_credentials_soft_delete(db_session, person):
         offset=0,
     )
     assert len(active) == 1
-    auth_service.user_credentials.delete(db_session, str(credential.id))
-    active = auth_service.user_credentials.list(
-        db_session,
+    service.delete(str(credential.id))
+    active = service.list(
         person_id=str(person.id),
         provider=None,
         is_active=None,
@@ -55,8 +54,7 @@ def test_user_credentials_soft_delete(db_session, person):
         limit=25,
         offset=0,
     )
-    inactive = auth_service.user_credentials.list(
-        db_session,
+    inactive = service.list(
         person_id=str(person.id),
         provider=None,
         is_active=False,
@@ -70,6 +68,7 @@ def test_user_credentials_soft_delete(db_session, person):
 
 
 def test_mfa_primary_switch(db_session, person):
+    service = auth_service.MFAMethods(db_session)
     payload = MFAMethodCreate(
         person_id=person.id,
         method_type="totp",
@@ -78,9 +77,8 @@ def test_mfa_primary_switch(db_session, person):
         is_primary=True,
         enabled=True,
     )
-    first = auth_service.mfa_methods.create(db_session, payload)
-    second = auth_service.mfa_methods.create(
-        db_session,
+    first = service.create(payload)
+    second = service.create(
         MFAMethodCreate(
             person_id=person.id,
             method_type="totp",
@@ -97,6 +95,7 @@ def test_mfa_primary_switch(db_session, person):
 
 
 def test_session_delete_revokes(db_session, person):
+    service = auth_service.Sessions(db_session)
     payload = SessionCreate(
         person_id=person.id,
         status=SessionStatus.active,
@@ -105,8 +104,8 @@ def test_session_delete_revokes(db_session, person):
         user_agent="pytest",
         expires_at="2099-01-01T00:00:00+00:00",
     )
-    session = auth_service.sessions.create(db_session, payload)
-    auth_service.sessions.delete(db_session, str(session.id))
+    session = service.create(payload)
+    service.delete(str(session.id))
     db_session.refresh(session)
     assert session.status == SessionStatus.revoked
     assert session.revoked_at is not None
@@ -116,7 +115,7 @@ def test_api_key_generate_with_redis(monkeypatch, db_session):
     fake = _FakeRedis()
     monkeypatch.setattr(auth_service, "_get_redis_client", lambda: fake)
     payload = ApiKeyGenerateRequest(label="test")
-    result = auth_service.api_keys.generate_with_rate_limit(db_session, payload, None)
+    result = auth_service.ApiKeys(db_session).generate_with_rate_limit(payload, None)
     raw_key = result["key"]
     api_key = result["api_key"]
     assert auth_service.hash_api_key(raw_key) == api_key.key_hash
@@ -126,7 +125,7 @@ def test_api_key_generate_with_redis(monkeypatch, db_session):
 def test_api_key_rate_limit_requires_redis(monkeypatch, db_session):
     monkeypatch.setattr(auth_service, "_get_redis_client", lambda: None)
     with pytest.raises(ServiceUnavailableError) as exc:
-        auth_service.api_keys.generate_with_rate_limit(
-            db_session, ApiKeyGenerateRequest(label="test"), None
+        auth_service.ApiKeys(db_session).generate_with_rate_limit(
+            ApiKeyGenerateRequest(label="test"), None
         )
     assert str(exc.value) == "Rate limiting unavailable (Redis required)"

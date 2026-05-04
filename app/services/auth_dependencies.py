@@ -105,7 +105,7 @@ def require_audit_auth(
             return {"actor_type": "user", "actor_id": actor_id}
         session = db.scalars(
             select(AuthSession)
-            .where(AuthSession.token_hash.in_(session_token_hash_candidates(token)))
+            .where(AuthSession.token_hash.in_(session_token_hash_candidates(token, db)))
             .where(AuthSession.status == SessionStatus.active)
             .where(AuthSession.revoked_at.is_(None))
             .where(AuthSession.expires_at > now)

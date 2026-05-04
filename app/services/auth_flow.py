@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import os
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -202,12 +203,44 @@ def _fernet(db: Session | None) -> Fernet:
         ) from exc
 
 
-def _hash_token(token: str) -> str:
+def _legacy_hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def hash_session_token(token: str) -> str:
-    return _hash_token(token)
+def _session_hash_secret(db: Session | None = None) -> str:
+    secret = (
+        _env_value("SESSION_TOKEN_HASH_SECRET")
+        or _env_value("API_KEY_HASH_SECRET")
+        or _env_value("JWT_SECRET")
+        or _env_value("SECRET_KEY")
+        or _setting_value(db, "session_token_hash_secret")
+        or _setting_value(db, "jwt_secret")
+    )
+    secret = resolve_secret(secret)
+    if not secret:
+        raise HTTPException(status_code=500, detail="Session hash secret not configured")
+    return secret
+
+
+def _hash_token(token: str, db: Session | None = None) -> str:
+    secret = _session_hash_secret(db)
+    return hmac.new(
+        secret.encode("utf-8"),
+        token.encode("utf-8"),
+        "sha256",
+    ).hexdigest()
+
+
+def hash_session_token(token: str, db: Session | None = None) -> str:
+    return _hash_token(token, db)
+
+
+def session_token_hash_candidates(
+    token: str, db: Session | None = None
+) -> tuple[str, ...]:
+    current = hash_session_token(token, db)
+    legacy = _legacy_hash_token(token)
+    return (current, legacy) if current != legacy else (current,)
 
 
 def _issue_access_token(
@@ -479,7 +512,7 @@ class AuthFlow(ListResponseMixin):
 
         now = _now()
         if credential.locked_until and credential.locked_until > now:
-            raise HTTPException(status_code=403, detail="Account locked")
+            raise HTTPException(status_code=401, detail="Invalid credentials")
 
         if not verify_password(password, credential.password_hash):
             credential.failed_login_attempts += 1
@@ -579,7 +612,6 @@ class AuthFlow(ListResponseMixin):
         try:
             db.flush()
         except IntegrityError as exc:
-            db.rollback()
             raise HTTPException(
                 status_code=409,
                 detail="Primary MFA method already exists for this user",
@@ -615,10 +647,10 @@ class AuthFlow(ListResponseMixin):
 
     @staticmethod
     def refresh(db: Session, refresh_token: str, request: Request):
-        token_hash = _hash_token(refresh_token)
+        token_hashes = session_token_hash_candidates(refresh_token, db)
         session = db.scalars(
             select(AuthSession)
-            .where(AuthSession.token_hash == token_hash)
+            .where(AuthSession.token_hash.in_(token_hashes))
             .where(AuthSession.status == SessionStatus.active)
             .where(AuthSession.revoked_at.is_(None))
             .limit(1)
@@ -626,7 +658,7 @@ class AuthFlow(ListResponseMixin):
         if not session:
             reused = db.scalars(
                 select(AuthSession)
-                .where(AuthSession.previous_token_hash == token_hash)
+                .where(AuthSession.previous_token_hash.in_(token_hashes))
                 .where(AuthSession.status == SessionStatus.active)
                 .where(AuthSession.revoked_at.is_(None))
                 .limit(1)
@@ -648,7 +680,7 @@ class AuthFlow(ListResponseMixin):
 
         new_refresh = secrets.token_urlsafe(48)
         session.previous_token_hash = session.token_hash
-        session.token_hash = _hash_token(new_refresh)
+        session.token_hash = _hash_token(new_refresh, db)
         session.token_rotated_at = _now()
         session.last_seen_at = _now()
         if request.client:
@@ -674,10 +706,10 @@ class AuthFlow(ListResponseMixin):
 
     @staticmethod
     def logout(db: Session, refresh_token: str):
-        token_hash = _hash_token(refresh_token)
+        token_hashes = session_token_hash_candidates(refresh_token, db)
         session = db.scalars(
             select(AuthSession)
-            .where(AuthSession.token_hash == token_hash)
+            .where(AuthSession.token_hash.in_(token_hashes))
             .where(AuthSession.revoked_at.is_(None))
             .limit(1)
         ).first()
@@ -726,7 +758,7 @@ class AuthFlow(ListResponseMixin):
         session = AuthSession(
             person_id=person_uuid,
             status=SessionStatus.active,
-            token_hash=_hash_token(refresh_token),
+            token_hash=_hash_token(refresh_token, db),
             ip_address=request.client.host if request.client else None,
             user_agent=_truncate_user_agent(request.headers.get("user-agent")),
             created_at=now,

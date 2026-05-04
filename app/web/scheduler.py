@@ -15,7 +15,7 @@ from app.models.scheduler import ScheduledTask
 from app.schemas.scheduler import ScheduledTaskCreate, ScheduledTaskUpdate
 from app.services.branding_context import load_branding_context
 from app.services.exceptions import NotFoundError
-from app.services.scheduler import scheduled_tasks
+from app.services.scheduler import ScheduledTasks
 from app.templates import templates
 from app.web.deps import require_web_auth
 
@@ -24,6 +24,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin/scheduler", tags=["web-scheduler"])
 
 PAGE_SIZE = 25
+
+
+def _commit(db: Session) -> None:
+    db.commit()
 
 
 def _base_context(
@@ -118,8 +122,8 @@ async def create_task_submit(
             interval_seconds=interval,
             enabled=data.get("enabled") == "on",
         )
-        scheduled_tasks.create(db, payload)
-        db.commit()
+        ScheduledTasks(db).create(payload)
+        _commit(db)
         logger.info("Created scheduled task via web: %s", payload.name)
         return RedirectResponse(
             url="/admin/scheduler?success=Task+created+successfully",
@@ -160,7 +164,7 @@ def edit_task_form(
 ) -> HTMLResponse:
     """Render the edit scheduled task form."""
     try:
-        task = scheduled_tasks.get(db, str(task_id))
+        task = ScheduledTasks(db).get(str(task_id))
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     ctx = _base_context(
@@ -195,8 +199,8 @@ async def edit_task_submit(
             interval_seconds=interval,
             enabled="enabled" in data,
         )
-        scheduled_tasks.update(db, str(task_id), payload)
-        db.commit()
+        ScheduledTasks(db).update(str(task_id), payload)
+        _commit(db)
         logger.info("Updated scheduled task via web: %s", task_id)
         return RedirectResponse(
             url="/admin/scheduler?success=Task+updated+successfully",
@@ -229,8 +233,8 @@ async def delete_task(
     _ = form.get("csrf_token")
 
     try:
-        scheduled_tasks.delete(db, str(task_id))
-        db.commit()
+        ScheduledTasks(db).delete(str(task_id))
+        _commit(db)
         logger.info("Deleted scheduled task via web: %s", task_id)
         return RedirectResponse(
             url="/admin/scheduler?success=Task+deleted+successfully",

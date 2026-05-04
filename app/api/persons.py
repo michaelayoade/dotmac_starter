@@ -1,11 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.schemas.common import ListResponse
 from app.schemas.person import PersonCreate, PersonRead, PersonUpdate
 from app.services import person as person_service
-from app.services.exceptions import NotFoundError
 
 router = APIRouter(prefix="/people", tags=["people"])
 
@@ -20,10 +19,7 @@ def create_person(payload: PersonCreate, db: Session = Depends(get_db)):
 
 @router.get("/{person_id}", response_model=PersonRead)
 def get_person(person_id: str, db: Session = Depends(get_db)):
-    try:
-        return person_service.People(db).get(person_id)
-    except NotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return person_service.People(db).get(person_id)
 
 
 @router.get("", response_model=ListResponse[PersonRead])
@@ -44,10 +40,7 @@ def list_people(
 
 @router.patch("/{person_id}", response_model=PersonRead)
 def update_person(person_id: str, payload: PersonUpdate, db: Session = Depends(get_db)):
-    try:
-        person = person_service.People(db).update(person_id, payload)
-    except NotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    person = person_service.People(db).update(person_id, payload)
     db.commit()
     db.refresh(person)
     return person
@@ -55,8 +48,5 @@ def update_person(person_id: str, payload: PersonUpdate, db: Session = Depends(g
 
 @router.delete("/{person_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_person(person_id: str, db: Session = Depends(get_db)):
-    try:
-        person_service.People(db).delete(person_id)
-    except NotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    person_service.People(db).delete(person_id)
     db.commit()

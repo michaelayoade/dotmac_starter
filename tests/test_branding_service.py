@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.models.domain_settings import DomainSetting, SettingDomain
 from app.services.branding import (
     generate_css,
     get_branding,
@@ -30,6 +31,12 @@ def test_save_branding_persists_values(db_session) -> None:
     assert branding["display_name"] == "Acme Starter"
     assert branding["primary_color"] == "#112233"
     assert branding["accent_color"] == "#445566"
+    setting = (
+        db_session.query(DomainSetting)
+        .filter(DomainSetting.key == "ui_branding")
+        .one()
+    )
+    assert setting.domain == SettingDomain.branding
 
 
 def test_generate_css_contains_brand_variables() -> None:

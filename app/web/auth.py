@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
+from app.models.auth import Session as AuthSession
+from app.models.auth import SessionStatus
+from app.services.auth_flow import decode_access_token, session_token_hash_candidates
 from app.services.branding_context import load_branding_context
+from app.services.common import coerce_uuid
 from app.templates import templates
 
 logger = logging.getLogger(__name__)
@@ -121,7 +127,35 @@ async def login_submit(
 
 
 @router.get("/logout")
-def logout(request: Request) -> RedirectResponse:
+def logout(request: Request, db: Session = Depends(get_db)) -> RedirectResponse:
+    access_token = request.cookies.get("access_token")
+    refresh_token = request.cookies.get("refresh_token")
+    try:
+        session = None
+        if access_token:
+            payload = decode_access_token(db, access_token)
+            session_id = payload.get("session_id")
+            if session_id:
+                session = db.get(AuthSession, coerce_uuid(str(session_id)))
+        if session is None and refresh_token:
+            session = db.scalars(
+                select(AuthSession)
+                .where(
+                    AuthSession.token_hash.in_(
+                        session_token_hash_candidates(refresh_token, db)
+                    )
+                )
+                .where(AuthSession.revoked_at.is_(None))
+                .limit(1)
+            ).first()
+        if session is not None and session.revoked_at is None:
+            session.status = SessionStatus.revoked
+            session.revoked_at = datetime.now(UTC)
+            db.commit()
+    except Exception:
+        logger.exception("Failed to revoke web session during logout")
+        db.rollback()
+
     response = RedirectResponse(url="/admin/login", status_code=302)
     response.delete_cookie("access_token", path="/")
     response.delete_cookie("refresh_token", path="/")

@@ -118,15 +118,17 @@ def _ensure_person(db: Session, person_id: str):
 
 
 class UserCredentials(ListResponseMixin):
-    @staticmethod
-    def create(db: Session, payload: UserCredentialCreate):
-        _ensure_person(db, str(payload.person_id))
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def create(self, payload: UserCredentialCreate):
+        _ensure_person(self.db, str(payload.person_id))
         data = payload.model_dump()
         fields_set = payload.model_fields_set
         if "provider" not in fields_set:
             try:
                 default_provider = settings_spec.resolve_value(
-                    db, SettingDomain.auth, "default_auth_provider"
+                    self.db, SettingDomain.auth, "default_auth_provider"
                 )
             except NotFoundError:
                 default_provider = None
@@ -135,21 +137,19 @@ class UserCredentials(ListResponseMixin):
                     default_provider, AuthProvider, "provider"
                 )
         credential = UserCredential(**data)
-        db.add(credential)
-        db.flush()
-        db.refresh(credential)
+        self.db.add(credential)
+        self.db.flush()
+        self.db.refresh(credential)
         return credential
 
-    @staticmethod
-    def get(db: Session, credential_id: str):
-        credential = db.get(UserCredential, coerce_uuid(credential_id))
+    def get(self, credential_id: str):
+        credential = self.db.get(UserCredential, coerce_uuid(credential_id))
         if not credential:
             raise NotFoundError("User credential not found")
         return credential
 
-    @staticmethod
     def list(
-        db: Session,
+        self,
         person_id: str | None,
         provider: str | None,
         is_active: bool | None,
@@ -180,37 +180,37 @@ class UserCredentials(ListResponseMixin):
                 "last_login_at": UserCredential.last_login_at,
             },
         )
-        return list(db.scalars(apply_pagination(query, limit, offset)).all())
+        return list(self.db.scalars(apply_pagination(query, limit, offset)).all())
 
-    @staticmethod
-    def update(db: Session, credential_id: str, payload: UserCredentialUpdate):
-        credential = db.get(UserCredential, coerce_uuid(credential_id))
+    def update(self, credential_id: str, payload: UserCredentialUpdate):
+        credential = self.db.get(UserCredential, coerce_uuid(credential_id))
         if not credential:
             raise NotFoundError("User credential not found")
         data = payload.model_dump(exclude_unset=True)
         if "person_id" in data:
-            _ensure_person(db, str(data["person_id"]))
+            _ensure_person(self.db, str(data["person_id"]))
         for key, value in data.items():
             setattr(credential, key, value)
-        db.flush()
-        db.refresh(credential)
+        self.db.flush()
+        self.db.refresh(credential)
         return credential
 
-    @staticmethod
-    def delete(db: Session, credential_id: str):
-        credential = db.get(UserCredential, coerce_uuid(credential_id))
+    def delete(self, credential_id: str):
+        credential = self.db.get(UserCredential, coerce_uuid(credential_id))
         if not credential:
             raise NotFoundError("User credential not found")
         credential.is_active = False
-        db.flush()
+        self.db.flush()
 
 
 class MFAMethods(ListResponseMixin):
-    @staticmethod
-    def create(db: Session, payload: MFAMethodCreate):
-        _ensure_person(db, str(payload.person_id))
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def create(self, payload: MFAMethodCreate):
+        _ensure_person(self.db, str(payload.person_id))
         if payload.is_primary:
-            db.execute(
+            self.db.execute(
                 update(MFAMethod)
                 .where(
                     MFAMethod.person_id == payload.person_id,
@@ -219,27 +219,24 @@ class MFAMethods(ListResponseMixin):
                 .values(is_primary=False)
             )
         method = MFAMethod(**payload.model_dump())
-        db.add(method)
+        self.db.add(method)
         try:
-            db.flush()
+            self.db.flush()
         except IntegrityError as exc:
-            db.rollback()
             raise ConflictError(
                 "Primary MFA method already exists for this user"
             ) from exc
-        db.refresh(method)
+        self.db.refresh(method)
         return method
 
-    @staticmethod
-    def get(db: Session, method_id: str):
-        method = db.get(MFAMethod, coerce_uuid(method_id))
+    def get(self, method_id: str):
+        method = self.db.get(MFAMethod, coerce_uuid(method_id))
         if not method:
             raise NotFoundError("MFA method not found")
         return method
 
-    @staticmethod
     def list(
-        db: Session,
+        self,
         person_id: str | None,
         method_type: str | None,
         is_primary: bool | None,
@@ -276,19 +273,18 @@ class MFAMethods(ListResponseMixin):
                 "is_primary": MFAMethod.is_primary,
             },
         )
-        return list(db.scalars(apply_pagination(query, limit, offset)).all())
+        return list(self.db.scalars(apply_pagination(query, limit, offset)).all())
 
-    @staticmethod
-    def update(db: Session, method_id: str, payload: MFAMethodUpdate):
-        method = db.get(MFAMethod, coerce_uuid(method_id))
+    def update(self, method_id: str, payload: MFAMethodUpdate):
+        method = self.db.get(MFAMethod, coerce_uuid(method_id))
         if not method:
             raise NotFoundError("MFA method not found")
         data = payload.model_dump(exclude_unset=True)
         if "person_id" in data:
-            _ensure_person(db, str(data["person_id"]))
+            _ensure_person(self.db, str(data["person_id"]))
         if data.get("is_primary"):
             person_id = data.get("person_id", method.person_id)
-            db.execute(
+            self.db.execute(
                 update(MFAMethod)
                 .where(
                     MFAMethod.person_id == person_id,
@@ -300,47 +296,45 @@ class MFAMethods(ListResponseMixin):
         for key, value in data.items():
             setattr(method, key, value)
         try:
-            db.flush()
+            self.db.flush()
         except IntegrityError as exc:
-            db.rollback()
             raise ConflictError(
                 "Primary MFA method already exists for this user"
             ) from exc
-        db.refresh(method)
+        self.db.refresh(method)
         return method
 
-    @staticmethod
-    def delete(db: Session, method_id: str):
-        method = db.get(MFAMethod, coerce_uuid(method_id))
+    def delete(self, method_id: str):
+        method = self.db.get(MFAMethod, coerce_uuid(method_id))
         if not method:
             raise NotFoundError("MFA method not found")
         method.is_active = False
         method.enabled = False
         method.is_primary = False
-        db.flush()
+        self.db.flush()
 
 
 class Sessions(ListResponseMixin):
-    @staticmethod
-    def create(db: Session, payload: SessionCreate):
-        _ensure_person(db, str(payload.person_id))
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def create(self, payload: SessionCreate):
+        _ensure_person(self.db, str(payload.person_id))
         data = payload.model_dump()
         session = AuthSession(**data)
-        db.add(session)
-        db.flush()
-        db.refresh(session)
+        self.db.add(session)
+        self.db.flush()
+        self.db.refresh(session)
         return session
 
-    @staticmethod
-    def get(db: Session, session_id: str):
-        session = db.get(AuthSession, coerce_uuid(session_id))
+    def get(self, session_id: str):
+        session = self.db.get(AuthSession, coerce_uuid(session_id))
         if not session:
             raise NotFoundError("Session not found")
         return session
 
-    @staticmethod
     def list(
-        db: Session,
+        self,
         person_id: str | None,
         status: str | None,
         order_by: str,
@@ -365,45 +359,45 @@ class Sessions(ListResponseMixin):
                 "status": AuthSession.status,
             },
         )
-        return list(db.scalars(apply_pagination(query, limit, offset)).all())
+        return list(self.db.scalars(apply_pagination(query, limit, offset)).all())
 
-    @staticmethod
-    def update(db: Session, session_id: str, payload: SessionUpdate):
-        session = db.get(AuthSession, coerce_uuid(session_id))
+    def update(self, session_id: str, payload: SessionUpdate):
+        session = self.db.get(AuthSession, coerce_uuid(session_id))
         if not session:
             raise NotFoundError("Session not found")
         data = payload.model_dump(exclude_unset=True)
         if "person_id" in data:
-            _ensure_person(db, str(data["person_id"]))
+            _ensure_person(self.db, str(data["person_id"]))
         for key, value in data.items():
             setattr(session, key, value)
-        db.flush()
-        db.refresh(session)
+        self.db.flush()
+        self.db.refresh(session)
         return session
 
-    @staticmethod
-    def delete(db: Session, session_id: str):
-        session = db.get(AuthSession, coerce_uuid(session_id))
+    def delete(self, session_id: str):
+        session = self.db.get(AuthSession, coerce_uuid(session_id))
         if not session:
             raise NotFoundError("Session not found")
         session.status = SessionStatus.revoked
         session.revoked_at = datetime.now(UTC)
-        db.flush()
+        self.db.flush()
 
 
 class ApiKeys(ListResponseMixin):
-    @staticmethod
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
     def generate_with_rate_limit(
-        db: Session, payload: ApiKeyGenerateRequest, request: Request | None
+        self, payload: ApiKeyGenerateRequest, request: Request | None
     ):
         client_ip = "unknown"
         if request is not None and request.client:
             client_ip = request.client.host
         window_seconds = _auth_int_setting(
-            db, "api_key_rate_window_seconds", _API_KEY_WINDOW_SECONDS
+            self.db, "api_key_rate_window_seconds", _API_KEY_WINDOW_SECONDS
         )
         max_per_window = _auth_int_setting(
-            db, "api_key_rate_max", _API_KEY_MAX_PER_WINDOW
+            self.db, "api_key_rate_max", _API_KEY_MAX_PER_WINDOW
         )
         redis_client = _get_redis_client()
         if not redis_client:
@@ -420,45 +414,41 @@ class ApiKeys(ListResponseMixin):
             raise ServiceUnavailableError(
                 "Rate limiting unavailable (Redis error)"
             ) from exc
-        api_key, raw_key = ApiKeys.generate(db, payload)
+        api_key, raw_key = self.generate(payload)
         return {"key": raw_key, "api_key": api_key}
 
-    @staticmethod
-    def generate(db: Session, payload: ApiKeyGenerateRequest):
+    def generate(self, payload: ApiKeyGenerateRequest):
         raw_key = secrets.token_urlsafe(32)
         data = payload.model_dump()
         data["key_hash"] = hash_api_key(raw_key)
         data.setdefault("is_active", True)
         if data.get("person_id"):
-            _ensure_person(db, str(data["person_id"]))
+            _ensure_person(self.db, str(data["person_id"]))
         api_key = ApiKey(**data)
-        db.add(api_key)
-        db.flush()
-        db.refresh(api_key)
+        self.db.add(api_key)
+        self.db.flush()
+        self.db.refresh(api_key)
         return api_key, raw_key
 
-    @staticmethod
-    def create(db: Session, payload: ApiKeyCreate):
+    def create(self, payload: ApiKeyCreate):
         if payload.person_id:
-            _ensure_person(db, str(payload.person_id))
+            _ensure_person(self.db, str(payload.person_id))
         data = payload.model_dump()
         data["key_hash"] = hash_api_key(data["key_hash"])
         api_key = ApiKey(**data)
-        db.add(api_key)
-        db.flush()
-        db.refresh(api_key)
+        self.db.add(api_key)
+        self.db.flush()
+        self.db.refresh(api_key)
         return api_key
 
-    @staticmethod
-    def get(db: Session, key_id: str):
-        api_key = db.get(ApiKey, coerce_uuid(key_id))
+    def get(self, key_id: str):
+        api_key = self.db.get(ApiKey, coerce_uuid(key_id))
         if not api_key:
             raise NotFoundError("API key not found")
         return api_key
 
-    @staticmethod
     def list(
-        db: Session,
+        self,
         person_id: str | None,
         is_active: bool | None,
         order_by: str,
@@ -479,39 +469,30 @@ class ApiKeys(ListResponseMixin):
             order_dir,
             {"created_at": ApiKey.created_at, "label": ApiKey.label},
         )
-        return list(db.scalars(apply_pagination(query, limit, offset)).all())
+        return list(self.db.scalars(apply_pagination(query, limit, offset)).all())
 
-    @staticmethod
-    def update(db: Session, key_id: str, payload: ApiKeyUpdate):
-        api_key = db.get(ApiKey, coerce_uuid(key_id))
+    def update(self, key_id: str, payload: ApiKeyUpdate):
+        api_key = self.db.get(ApiKey, coerce_uuid(key_id))
         if not api_key:
             raise NotFoundError("API key not found")
         data = payload.model_dump(exclude_unset=True)
         if "person_id" in data and data["person_id"] is not None:
-            _ensure_person(db, str(data["person_id"]))
+            _ensure_person(self.db, str(data["person_id"]))
         if "key_hash" in data and data["key_hash"]:
             data["key_hash"] = hash_api_key(data["key_hash"])
         for key, value in data.items():
             setattr(api_key, key, value)
-        db.flush()
-        db.refresh(api_key)
+        self.db.flush()
+        self.db.refresh(api_key)
         return api_key
 
-    @staticmethod
-    def delete(db: Session, key_id: str):
-        api_key = db.get(ApiKey, coerce_uuid(key_id))
+    def delete(self, key_id: str):
+        api_key = self.db.get(ApiKey, coerce_uuid(key_id))
         if not api_key:
             raise NotFoundError("API key not found")
         api_key.is_active = False
         api_key.revoked_at = datetime.now(UTC)
-        db.flush()
+        self.db.flush()
 
-    @staticmethod
-    def revoke(db: Session, key_id: str):
-        ApiKeys.delete(db, key_id)
-
-
-user_credentials = UserCredentials()
-mfa_methods = MFAMethods()
-sessions = Sessions()
-api_keys = ApiKeys()
+    def revoke(self, key_id: str):
+        self.delete(key_id)

@@ -74,6 +74,7 @@ class Settings:
 
     # CORS
     cors_origins: str = os.getenv("CORS_ORIGINS", "")  # Comma-separated origins
+    trusted_hosts: str = os.getenv("TRUSTED_HOSTS", "")
 
     # Metrics
     metrics_token: str | None = os.getenv("METRICS_TOKEN") or None
@@ -129,6 +130,22 @@ def validate_settings(s: Settings) -> list[ConfigWarning]:
     ):
         warnings.append(
             ConfigWarning("DATABASE_URL points to localhost in production", critical=True)
+        )
+
+    if production and not s.trusted_hosts:
+        warnings.append(
+            ConfigWarning(
+                "TRUSTED_HOSTS is not set - Host header validation is disabled",
+                critical=True,
+            )
+        )
+
+    if "*" in [origin.strip() for origin in s.cors_origins.split(",")]:
+        warnings.append(
+            ConfigWarning(
+                "CORS_ORIGINS contains * while credentials are enabled",
+                critical=production,
+            )
         )
 
     return warnings

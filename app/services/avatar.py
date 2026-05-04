@@ -86,7 +86,12 @@ def delete_avatar(avatar_url: str | None) -> None:
 
     if avatar_url.startswith(settings.avatar_url_prefix):
         filename = avatar_url.replace(settings.avatar_url_prefix + "/", "")
-        file_path = Path(settings.avatar_upload_dir) / filename
+        upload_dir = Path(settings.avatar_upload_dir).resolve()
+        file_path = (upload_dir / filename).resolve()
+        try:
+            file_path.relative_to(upload_dir)
+        except ValueError:
+            return
         if file_path.exists():
             os.remove(file_path)
 

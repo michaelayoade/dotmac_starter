@@ -21,6 +21,7 @@ class SettingDomain(enum.Enum):
     audit = "audit"
     scheduler = "scheduler"
     billing = "billing"
+    branding = "branding"
 
 
 class DomainSetting(Base):

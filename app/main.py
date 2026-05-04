@@ -11,6 +11,7 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import select, text
@@ -102,6 +103,14 @@ if cors_origins:
         ],
         expose_headers=["X-Request-Id", "X-RateLimit-Remaining"],
     )
+
+trusted_hosts = [
+    host.strip()
+    for host in getattr(settings, "trusted_hosts", "").split(",")
+    if host.strip()
+]
+if trusted_hosts:
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=trusted_hosts)
 
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(CSRFMiddleware)
