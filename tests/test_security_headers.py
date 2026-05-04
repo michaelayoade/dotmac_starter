@@ -1,4 +1,5 @@
 """Tests for SecurityHeadersMiddleware."""
+
 from __future__ import annotations
 
 import pytest
@@ -54,6 +55,18 @@ class TestSecurityHeaders:
         assert "frame-ancestors 'none'" in csp
         assert "form-action 'self'" in csp
 
+    def test_no_unsafe_eval_in_csp(self, client: TestClient) -> None:
+        resp = client.get("/test")
+        csp = resp.headers["Content-Security-Policy"]
+        assert "'unsafe-eval'" not in csp
+
+    def test_no_cdn_allowlist_in_csp(self, client: TestClient) -> None:
+        resp = client.get("/test")
+        csp = resp.headers["Content-Security-Policy"]
+        assert "cdn.tailwindcss.com" not in csp
+        assert "unpkg.com" not in csp
+        assert "cdn.jsdelivr.net" not in csp
+
     def test_no_hsts_without_https(self, client: TestClient) -> None:
         resp = client.get("/test")
         assert "Strict-Transport-Security" not in resp.headers
@@ -71,6 +84,7 @@ class TestSecurityHeaders:
         @app.get("/custom-csp")
         def custom_csp():
             from starlette.responses import JSONResponse
+
             resp = JSONResponse({"ok": True})
             resp.headers["Content-Security-Policy"] = "default-src 'none'"
             return resp

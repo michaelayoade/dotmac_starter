@@ -65,6 +65,16 @@ logs/
 static/avatars/*
 !static/avatars/.gitkeep
 
+# Tailwind CSS build artifacts
+static/css/styles.css
+bin/
+
+# Node
+node_modules/
+
+# Tool caches
+.cache/
+
 # OS
 .DS_Store
 Thumbs.db
@@ -82,6 +92,10 @@ poetry.lock
 .seabone/pm-state.json
 .seabone/orchestrator-state.json
 .seabone/ci-state.json
+.seabone/last-report.txt
+.seabone/learnings.json
+.seabone/loop-spawned.json
+.seabone/loop-state.json
 .seabone/logs/
 .seabone/findings/
 .seabone/reports/

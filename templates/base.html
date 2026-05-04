@@ -1,8 +1,7 @@
 <!doctype html>
 <html lang="en"
-      x-data="{ darkMode: localStorage.getItem('darkMode') === 'true' }"
-      x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val))"
-      :class="{ 'dark': darkMode }">
+      x-data
+      :class="{ 'dark': $store.dark.on }">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -17,95 +16,16 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     {% include "partials/_org_branding_head.html" %}
 
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'],
-                        display: ['Outfit', 'system-ui', 'sans-serif'],
-                    },
-                    colors: {
-                        // Distinctive teal-cyan palette with warmth
-                        primary: {
-                            50: '#ecfeff',
-                            100: '#cffafe',
-                            200: '#a5f3fc',
-                            300: '#67e8f9',
-                            400: '#22d3ee',
-                            500: '#06b6d4',
-                            600: '#0891b2',
-                            700: '#0e7490',
-                            800: '#155e75',
-                            900: '#164e63',
-                            950: '#083344',
-                        },
-                        // Warm accent for contrast
-                        accent: {
-                            50: '#fff7ed',
-                            100: '#ffedd5',
-                            200: '#fed7aa',
-                            300: '#fdba74',
-                            400: '#fb923c',
-                            500: '#f97316',
-                            600: '#ea580c',
-                            700: '#c2410c',
-                            800: '#9a3412',
-                            900: '#7c2d12',
-                            950: '#431407',
-                        }
-                    }
-                }
-            }
-        }
-    </script>
+    <!-- Tailwind CSS (built from tailwind.config.js) -->
+    <link rel="stylesheet" href="/static/css/styles.css">
 
     <!-- HTMX -->
-    <script src="https://unpkg.com/htmx.org@2.0.0"></script>
-    <script src="https://unpkg.com/htmx-ext-loading-states@2.0.0/loading-states.js"></script>
+    <script src="/static/js/htmx.min.js"></script>
+    <script src="/static/js/htmx-loading-states.js"></script>
 
-    <!-- Alpine.js -->
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <script>
-        document.addEventListener("DOMContentLoaded", () => {
-            if (window.Alpine) {
-                return;
-            }
-            const menus = new Map();
-            document.querySelectorAll("[data-dropdown-trigger]").forEach((trigger) => {
-                const menuId = trigger.getAttribute("data-dropdown-trigger");
-                if (!menuId) {
-                    return;
-                }
-                const menu = document.getElementById(menuId);
-                if (!menu) {
-                    return;
-                }
-                menu.removeAttribute("x-cloak");
-                menu.style.display = "none";
-                menus.set(menuId, { trigger, menu });
-                trigger.addEventListener("click", (event) => {
-                    event.stopPropagation();
-                    const isOpen = menu.style.display !== "none";
-                    menu.style.display = isOpen ? "none" : "block";
-                });
-            });
-            document.addEventListener("click", (event) => {
-                menus.forEach(({ trigger, menu }) => {
-                    if (menu.style.display === "none") {
-                        return;
-                    }
-                    if (menu.contains(event.target) || trigger.contains(event.target)) {
-                        return;
-                    }
-                    menu.style.display = "none";
-                });
-            });
-        });
-    </script>
+    <!-- Alpine.js CSP build 3.15.8 + components -->
+    <script src="/static/js/components.js"></script>
+    <script defer src="/static/js/alpine.min.js"></script>
 
     <!-- Custom Styles -->
     <style>
@@ -330,7 +250,7 @@
 
     <!-- Toast Notification Container -->
     <div id="toast-container"
-         x-data="toastStore()"
+         x-data="toastStore"
          x-on:show-toast.window="addToast($event.detail)"
          role="status"
          aria-live="polite"
@@ -345,10 +265,10 @@
                  x-transition:leave-start="translate-y-0 opacity-100"
                  x-transition:leave-end="translate-y-2 opacity-0"
                  :class="{
-                     'bg-green-600': toast.type === 'success',
-                     'bg-red-600': toast.type === 'error',
-                     'bg-yellow-500': toast.type === 'warning',
-                     'bg-blue-600': toast.type === 'info'
+                     'bg-green-600': isSuccess(toast),
+                     'bg-red-600': isError(toast),
+                     'bg-yellow-500': isWarning(toast),
+                     'bg-blue-600': isInfo(toast)
                  }"
                  class="px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium pointer-events-auto flex items-center gap-2 max-w-sm">
                 <span x-text="toast.message"></span>
@@ -363,32 +283,6 @@
 
     <!-- Global Scripts -->
     <script>
-        // Toast notification store
-        function toastStore() {
-            return {
-                toasts: [],
-                addToast(detail) {
-                    const id = Date.now();
-                    this.toasts.push({
-                        id,
-                        message: detail.message,
-                        type: detail.type || 'info',
-                        visible: true
-                    });
-                    setTimeout(() => this.removeToast(id), detail.duration || 4000);
-                },
-                removeToast(id) {
-                    const toast = this.toasts.find(t => t.id === id);
-                    if (toast) {
-                        toast.visible = false;
-                        setTimeout(() => {
-                            this.toasts = this.toasts.filter(t => t.id !== id);
-                        }, 300);
-                    }
-                }
-            }
-        }
-
         // Global helper: window.showToast('message', 'success')
         window.showToast = function(message, type, duration) {
             window.dispatchEvent(new CustomEvent('show-toast', {

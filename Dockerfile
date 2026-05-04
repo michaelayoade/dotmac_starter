@@ -2,12 +2,15 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN pip install poetry && poetry config virtualenvs.create false
+RUN pip install --no-cache-dir poetry && poetry config virtualenvs.create false
 
-COPY pyproject.toml poetry.lock ./
-RUN poetry install --only main --no-interaction --no-ansi
+COPY pyproject.toml ./
+RUN poetry install --only main --no-root --no-interaction --no-ansi
 
 COPY . .
+
+# Build Tailwind CSS
+RUN ./bin/tailwindcss -i static/css/input.css -o static/css/styles.css --minify
 
 EXPOSE 8001
 
