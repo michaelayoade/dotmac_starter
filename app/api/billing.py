@@ -50,14 +50,14 @@ from app.services import billing as billing_service
 router = APIRouter(tags=["billing"])
 
 
-def _commit(db: Session, item):
+def _commit(db: Session) -> None:
     db.commit()
+
+
+def _commit_and_refresh(db: Session, item):
+    _commit(db)
     db.refresh(item)
     return item
-
-
-def _commit_delete(db: Session) -> None:
-    db.commit()
 
 
 # ── Products ─────────────────────────────────────────────
@@ -67,7 +67,7 @@ def _commit_delete(db: Session) -> None:
     "/products", response_model=ProductRead, status_code=status.HTTP_201_CREATED
 )
 def create_product(payload: ProductCreate, db: Session = Depends(get_db)):
-    return _commit(db, billing_service.products.create(db, payload))
+    return _commit_and_refresh(db, billing_service.products.create(db, payload))
 
 
 @router.get("/products/{item_id}", response_model=ProductRead)
@@ -91,13 +91,13 @@ def list_products(
 
 @router.patch("/products/{item_id}", response_model=ProductRead)
 def update_product(item_id: str, payload: ProductUpdate, db: Session = Depends(get_db)):
-    return _commit(db, billing_service.products.update(db, item_id, payload))
+    return _commit_and_refresh(db, billing_service.products.update(db, item_id, payload))
 
 
 @router.delete("/products/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_product(item_id: str, db: Session = Depends(get_db)) -> None:
     billing_service.products.delete(db, item_id)
-    _commit_delete(db)
+    _commit(db)
 
 
 # ── Prices ───────────────────────────────────────────────
@@ -105,7 +105,7 @@ def delete_product(item_id: str, db: Session = Depends(get_db)) -> None:
 
 @router.post("/prices", response_model=PriceRead, status_code=status.HTTP_201_CREATED)
 def create_price(payload: PriceCreate, db: Session = Depends(get_db)):
-    return _commit(db, billing_service.prices.create(db, payload))
+    return _commit_and_refresh(db, billing_service.prices.create(db, payload))
 
 
 @router.get("/prices/{item_id}", response_model=PriceRead)
@@ -132,13 +132,13 @@ def list_prices(
 
 @router.patch("/prices/{item_id}", response_model=PriceRead)
 def update_price(item_id: str, payload: PriceUpdate, db: Session = Depends(get_db)):
-    return _commit(db, billing_service.prices.update(db, item_id, payload))
+    return _commit_and_refresh(db, billing_service.prices.update(db, item_id, payload))
 
 
 @router.delete("/prices/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_price(item_id: str, db: Session = Depends(get_db)) -> None:
     billing_service.prices.delete(db, item_id)
-    _commit_delete(db)
+    _commit(db)
 
 
 # ── Customers ────────────────────────────────────────────
@@ -148,7 +148,7 @@ def delete_price(item_id: str, db: Session = Depends(get_db)) -> None:
     "/customers", response_model=CustomerRead, status_code=status.HTTP_201_CREATED
 )
 def create_customer(payload: CustomerCreate, db: Session = Depends(get_db)):
-    return _commit(db, billing_service.customers.create(db, payload))
+    return _commit_and_refresh(db, billing_service.customers.create(db, payload))
 
 
 @router.get("/customers/{item_id}", response_model=CustomerRead)
@@ -176,13 +176,13 @@ def list_customers(
 def update_customer(
     item_id: str, payload: CustomerUpdate, db: Session = Depends(get_db)
 ):
-    return _commit(db, billing_service.customers.update(db, item_id, payload))
+    return _commit_and_refresh(db, billing_service.customers.update(db, item_id, payload))
 
 
 @router.delete("/customers/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_customer(item_id: str, db: Session = Depends(get_db)) -> None:
     billing_service.customers.delete(db, item_id)
-    _commit_delete(db)
+    _commit(db)
 
 
 # ── Subscriptions ────────────────────────────────────────
@@ -194,7 +194,7 @@ def delete_customer(item_id: str, db: Session = Depends(get_db)) -> None:
     status_code=status.HTTP_201_CREATED,
 )
 def create_subscription(payload: SubscriptionCreate, db: Session = Depends(get_db)):
-    return _commit(db, billing_service.subscriptions.create(db, payload))
+    return _commit_and_refresh(db, billing_service.subscriptions.create(db, payload))
 
 
 @router.get("/subscriptions/{item_id}", response_model=SubscriptionRead)
@@ -222,13 +222,13 @@ def list_subscriptions(
 def update_subscription(
     item_id: str, payload: SubscriptionUpdate, db: Session = Depends(get_db)
 ):
-    return _commit(db, billing_service.subscriptions.update(db, item_id, payload))
+    return _commit_and_refresh(db, billing_service.subscriptions.update(db, item_id, payload))
 
 
 @router.delete("/subscriptions/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_subscription(item_id: str, db: Session = Depends(get_db)) -> None:
     billing_service.subscriptions.delete(db, item_id)
-    _commit_delete(db)
+    _commit(db)
 
 
 # ── Subscription Items ───────────────────────────────────
@@ -242,7 +242,7 @@ def delete_subscription(item_id: str, db: Session = Depends(get_db)) -> None:
 def create_subscription_item(
     payload: SubscriptionItemCreate, db: Session = Depends(get_db)
 ):
-    return _commit(db, billing_service.subscription_items.create(db, payload))
+    return _commit_and_refresh(db, billing_service.subscription_items.create(db, payload))
 
 
 @router.get("/subscription-items/{item_id}", response_model=SubscriptionItemRead)
@@ -269,13 +269,13 @@ def list_subscription_items(
 def update_subscription_item(
     item_id: str, payload: SubscriptionItemUpdate, db: Session = Depends(get_db)
 ):
-    return _commit(db, billing_service.subscription_items.update(db, item_id, payload))
+    return _commit_and_refresh(db, billing_service.subscription_items.update(db, item_id, payload))
 
 
 @router.delete("/subscription-items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_subscription_item(item_id: str, db: Session = Depends(get_db)) -> None:
     billing_service.subscription_items.delete(db, item_id)
-    _commit_delete(db)
+    _commit(db)
 
 
 # ── Invoices ─────────────────────────────────────────────
@@ -285,7 +285,7 @@ def delete_subscription_item(item_id: str, db: Session = Depends(get_db)) -> Non
     "/invoices", response_model=InvoiceRead, status_code=status.HTTP_201_CREATED
 )
 def create_invoice(payload: InvoiceCreate, db: Session = Depends(get_db)):
-    return _commit(db, billing_service.invoices.create(db, payload))
+    return _commit_and_refresh(db, billing_service.invoices.create(db, payload))
 
 
 @router.get("/invoices/{item_id}", response_model=InvoiceRead)
@@ -311,13 +311,13 @@ def list_invoices(
 
 @router.patch("/invoices/{item_id}", response_model=InvoiceRead)
 def update_invoice(item_id: str, payload: InvoiceUpdate, db: Session = Depends(get_db)):
-    return _commit(db, billing_service.invoices.update(db, item_id, payload))
+    return _commit_and_refresh(db, billing_service.invoices.update(db, item_id, payload))
 
 
 @router.delete("/invoices/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_invoice(item_id: str, db: Session = Depends(get_db)) -> None:
     billing_service.invoices.delete(db, item_id)
-    _commit_delete(db)
+    _commit(db)
 
 
 # ── Invoice Items ────────────────────────────────────────
@@ -329,7 +329,7 @@ def delete_invoice(item_id: str, db: Session = Depends(get_db)) -> None:
     status_code=status.HTTP_201_CREATED,
 )
 def create_invoice_item(payload: InvoiceItemCreate, db: Session = Depends(get_db)):
-    return _commit(db, billing_service.invoice_items.create(db, payload))
+    return _commit_and_refresh(db, billing_service.invoice_items.create(db, payload))
 
 
 @router.get("/invoice-items/{item_id}", response_model=InvoiceItemRead)
@@ -355,13 +355,13 @@ def list_invoice_items(
 def update_invoice_item(
     item_id: str, payload: InvoiceItemUpdate, db: Session = Depends(get_db)
 ):
-    return _commit(db, billing_service.invoice_items.update(db, item_id, payload))
+    return _commit_and_refresh(db, billing_service.invoice_items.update(db, item_id, payload))
 
 
 @router.delete("/invoice-items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_invoice_item(item_id: str, db: Session = Depends(get_db)) -> None:
     billing_service.invoice_items.delete(db, item_id)
-    _commit_delete(db)
+    _commit(db)
 
 
 # ── Payment Methods ──────────────────────────────────────
@@ -373,7 +373,7 @@ def delete_invoice_item(item_id: str, db: Session = Depends(get_db)) -> None:
     status_code=status.HTTP_201_CREATED,
 )
 def create_payment_method(payload: PaymentMethodCreate, db: Session = Depends(get_db)):
-    return _commit(db, billing_service.payment_methods.create(db, payload))
+    return _commit_and_refresh(db, billing_service.payment_methods.create(db, payload))
 
 
 @router.get("/payment-methods/{item_id}", response_model=PaymentMethodRead)
@@ -401,13 +401,13 @@ def list_payment_methods(
 def update_payment_method(
     item_id: str, payload: PaymentMethodUpdate, db: Session = Depends(get_db)
 ):
-    return _commit(db, billing_service.payment_methods.update(db, item_id, payload))
+    return _commit_and_refresh(db, billing_service.payment_methods.update(db, item_id, payload))
 
 
 @router.delete("/payment-methods/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_payment_method(item_id: str, db: Session = Depends(get_db)) -> None:
     billing_service.payment_methods.delete(db, item_id)
-    _commit_delete(db)
+    _commit(db)
 
 
 # ── Payment Intents ──────────────────────────────────────
@@ -419,7 +419,7 @@ def delete_payment_method(item_id: str, db: Session = Depends(get_db)) -> None:
     status_code=status.HTTP_201_CREATED,
 )
 def create_payment_intent(payload: PaymentIntentCreate, db: Session = Depends(get_db)):
-    return _commit(db, billing_service.payment_intents.create(db, payload))
+    return _commit_and_refresh(db, billing_service.payment_intents.create(db, payload))
 
 
 @router.get("/payment-intents/{item_id}", response_model=PaymentIntentRead)
@@ -447,7 +447,7 @@ def list_payment_intents(
 def update_payment_intent(
     item_id: str, payload: PaymentIntentUpdate, db: Session = Depends(get_db)
 ):
-    return _commit(db, billing_service.payment_intents.update(db, item_id, payload))
+    return _commit_and_refresh(db, billing_service.payment_intents.update(db, item_id, payload))
 
 
 # ── Usage Records ────────────────────────────────────────
@@ -459,7 +459,7 @@ def update_payment_intent(
     status_code=status.HTTP_201_CREATED,
 )
 def create_usage_record(payload: UsageRecordCreate, db: Session = Depends(get_db)):
-    return _commit(db, billing_service.usage_records.create(db, payload))
+    return _commit_and_refresh(db, billing_service.usage_records.create(db, payload))
 
 
 @router.get("/usage-records/{item_id}", response_model=UsageRecordRead)
@@ -486,7 +486,7 @@ def list_usage_records(
 
 @router.post("/coupons", response_model=CouponRead, status_code=status.HTTP_201_CREATED)
 def create_coupon(payload: CouponCreate, db: Session = Depends(get_db)):
-    return _commit(db, billing_service.coupons.create(db, payload))
+    return _commit_and_refresh(db, billing_service.coupons.create(db, payload))
 
 
 @router.get("/coupons/{item_id}", response_model=CouponRead)
@@ -511,13 +511,13 @@ def list_coupons(
 
 @router.patch("/coupons/{item_id}", response_model=CouponRead)
 def update_coupon(item_id: str, payload: CouponUpdate, db: Session = Depends(get_db)):
-    return _commit(db, billing_service.coupons.update(db, item_id, payload))
+    return _commit_and_refresh(db, billing_service.coupons.update(db, item_id, payload))
 
 
 @router.delete("/coupons/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_coupon(item_id: str, db: Session = Depends(get_db)) -> None:
     billing_service.coupons.delete(db, item_id)
-    _commit_delete(db)
+    _commit(db)
 
 
 # ── Discounts ────────────────────────────────────────────
@@ -527,7 +527,7 @@ def delete_coupon(item_id: str, db: Session = Depends(get_db)) -> None:
     "/discounts", response_model=DiscountRead, status_code=status.HTTP_201_CREATED
 )
 def create_discount(payload: DiscountCreate, db: Session = Depends(get_db)):
-    return _commit(db, billing_service.discounts.create(db, payload))
+    return _commit_and_refresh(db, billing_service.discounts.create(db, payload))
 
 
 @router.get("/discounts/{item_id}", response_model=DiscountRead)
@@ -554,7 +554,7 @@ def list_discounts(
 @router.delete("/discounts/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_discount(item_id: str, db: Session = Depends(get_db)) -> None:
     billing_service.discounts.delete(db, item_id)
-    _commit_delete(db)
+    _commit(db)
 
 
 # ── Entitlements ─────────────────────────────────────────
@@ -564,7 +564,7 @@ def delete_discount(item_id: str, db: Session = Depends(get_db)) -> None:
     "/entitlements", response_model=EntitlementRead, status_code=status.HTTP_201_CREATED
 )
 def create_entitlement(payload: EntitlementCreate, db: Session = Depends(get_db)):
-    return _commit(db, billing_service.entitlements.create(db, payload))
+    return _commit_and_refresh(db, billing_service.entitlements.create(db, payload))
 
 
 @router.get("/entitlements/{item_id}", response_model=EntitlementRead)
@@ -591,13 +591,13 @@ def list_entitlements(
 def update_entitlement(
     item_id: str, payload: EntitlementUpdate, db: Session = Depends(get_db)
 ):
-    return _commit(db, billing_service.entitlements.update(db, item_id, payload))
+    return _commit_and_refresh(db, billing_service.entitlements.update(db, item_id, payload))
 
 
 @router.delete("/entitlements/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_entitlement(item_id: str, db: Session = Depends(get_db)) -> None:
     billing_service.entitlements.delete(db, item_id)
-    _commit_delete(db)
+    _commit(db)
 
 
 # ── Webhook Events ───────────────────────────────────────
@@ -609,7 +609,7 @@ def delete_entitlement(item_id: str, db: Session = Depends(get_db)) -> None:
     status_code=status.HTTP_201_CREATED,
 )
 def create_webhook_event(payload: WebhookEventCreate, db: Session = Depends(get_db)):
-    return _commit(db, billing_service.webhook_events.create(db, payload))
+    return _commit_and_refresh(db, billing_service.webhook_events.create(db, payload))
 
 
 @router.get("/webhook-events/{item_id}", response_model=WebhookEventRead)
@@ -637,4 +637,4 @@ def list_webhook_events(
 def update_webhook_event(
     item_id: str, payload: WebhookEventUpdate, db: Session = Depends(get_db)
 ):
-    return _commit(db, billing_service.webhook_events.update(db, item_id, payload))
+    return _commit_and_refresh(db, billing_service.webhook_events.update(db, item_id, payload))

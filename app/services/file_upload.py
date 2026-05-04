@@ -11,6 +11,10 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.file_upload import FileUpload, FileUploadStatus
+from app.models.rbac import PersonRole, Role
+from app.schemas.common import ListResponse
+from app.schemas.file_upload import FileUploadRead
+from app.services.common import coerce_uuid
 from app.services.exceptions import BadRequestError, NotFoundError
 from app.services.storage import StorageBackend, get_storage_backend
 
@@ -114,9 +118,92 @@ class FileUploadService:
         logger.info("Uploaded file: %s (id=%s)", filename, record.id)
         return record
 
+    def upload_for_actor(
+        self,
+        *,
+        actor_id: UUID,
+        content: bytes,
+        filename: str,
+        content_type: str,
+        category: str = "document",
+        entity_type: str | None = None,
+        entity_id: str | None = None,
+    ) -> FileUpload:
+        return self.upload(
+            content=content,
+            filename=filename,
+            content_type=content_type,
+            uploaded_by=actor_id,
+            category=category,
+            entity_type=entity_type,
+            entity_id=entity_id,
+        )
+
     def get_by_id(self, file_id: UUID) -> FileUpload | None:
         """Get a file upload by ID."""
         return self.db.get(FileUpload, file_id)
+
+    def _is_admin(self, person_id: UUID) -> bool:
+        return (
+            self.db.scalars(
+                select(PersonRole)
+                .join(Role, PersonRole.role_id == Role.id)
+                .where(PersonRole.person_id == person_id)
+                .where(Role.name == "admin")
+                .where(Role.is_active.is_(True))
+                .limit(1)
+            ).first()
+            is not None
+        )
+
+    def _visible_upload_or_404(self, file_id: UUID, actor_id: UUID) -> FileUpload:
+        record = self.get_by_id(file_id)
+        if (
+            not record
+            or not record.is_active
+            or (
+                not self._is_admin(actor_id)
+                and record.uploaded_by != actor_id
+            )
+        ):
+            raise NotFoundError("File upload not found")
+        return record
+
+    def get_for_actor(self, file_id: UUID, actor_id: UUID) -> FileUpload:
+        return self._visible_upload_or_404(file_id, actor_id)
+
+    def list_response_for_actor(
+        self,
+        *,
+        actor_id: UUID,
+        category: str | None = None,
+        entity_type: str | None = None,
+        entity_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> ListResponse[FileUploadRead]:
+        uploaded_by = None if self._is_admin(actor_id) else actor_id
+        items = self.list_uploads(
+            uploaded_by=uploaded_by,
+            category=category,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            limit=limit,
+            offset=offset,
+        )
+        total = self.count(
+            uploaded_by=uploaded_by,
+            category=category,
+            entity_type=entity_type,
+            entity_id=entity_id,
+        )
+        return ListResponse(
+            items=[FileUploadRead.model_validate(i) for i in items],
+            count=len(items),
+            limit=limit,
+            offset=offset,
+            total=total,
+        )
 
     def list_uploads(
         self,
@@ -189,3 +276,14 @@ class FileUploadService:
         record.is_active = False
         self.db.flush()
         logger.info("Deleted file upload: %s", file_id)
+
+    def delete_for_actor(self, file_id: UUID, actor_id: UUID) -> None:
+        self._visible_upload_or_404(file_id, actor_id)
+        self.delete(file_id)
+
+
+def current_person_id(auth: dict) -> UUID:
+    person_id = coerce_uuid(auth["person_id"])
+    if person_id is None:
+        raise NotFoundError("User not found")
+    return person_id

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import quote_plus
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -33,6 +34,10 @@ SUBSCRIPTION_STATUSES = [
     "unpaid",
     "paused",
 ]
+
+
+def _commit(db: Session) -> None:
+    db.commit()
 
 
 def _base_context(
@@ -197,7 +202,7 @@ async def edit_subscription_submit(
             is_active="is_active" in data,
         )
         billing_service.subscriptions.update(db, str(item_id), payload)
-        db.commit()
+        _commit(db)
         logger.info("Updated subscription via web: %s", item_id)
         return RedirectResponse(
             url=f"/admin/billing/subscriptions/{item_id}?success=Subscription+updated+successfully",
@@ -234,7 +239,7 @@ async def delete_subscription(
 
     try:
         billing_service.subscriptions.delete(db, str(item_id))
-        db.commit()
+        _commit(db)
         logger.info("Deleted subscription via web: %s", item_id)
         return RedirectResponse(
             url="/admin/billing/subscriptions?success=Subscription+deleted+successfully",
@@ -243,6 +248,6 @@ async def delete_subscription(
     except Exception as exc:
         logger.warning("Failed to delete subscription %s: %s", item_id, exc)
         return RedirectResponse(
-            url=f"/admin/billing/subscriptions?error={exc}",
+            url=f"/admin/billing/subscriptions?error={quote_plus(str(exc))}",
             status_code=302,
         )

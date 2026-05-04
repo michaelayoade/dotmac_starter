@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["web-auth"])
 
 
+def _commit(db: Session) -> None:
+    db.commit()
+
+
 def _is_secure_request(request: Request) -> bool:
     """Return True if request is over HTTPS."""
     proto = request.headers.get("x-forwarded-proto", "")
@@ -151,7 +155,7 @@ def logout(request: Request, db: Session = Depends(get_db)) -> RedirectResponse:
         if session is not None and session.revoked_at is None:
             session.status = SessionStatus.revoked
             session.revoked_at = datetime.now(UTC)
-            db.commit()
+            _commit(db)
     except Exception:
         logger.exception("Failed to revoke web session during logout")
         db.rollback()

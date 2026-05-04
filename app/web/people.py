@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import quote_plus
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -24,6 +25,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin/people", tags=["web-people"])
 
 PAGE_SIZE = 25
+
+
+def _commit(db: Session) -> None:
+    db.commit()
 
 
 def _base_context(
@@ -122,7 +127,7 @@ async def create_person_submit(
             is_active=data.get("is_active") == "on",
         )
         People(db).create(payload)
-        db.commit()
+        _commit(db)
         logger.info("Created person via web: %s", payload.email)
         return RedirectResponse(
             url="/admin/people?success=Person+created+successfully",
@@ -205,7 +210,7 @@ async def edit_person_submit(
             is_active="is_active" in data,
         )
         People(db).update(str(person_id), payload)
-        db.commit()
+        _commit(db)
         logger.info("Updated person via web: %s", person_id)
         return RedirectResponse(
             url=f"/admin/people/{person_id}?success=Person+updated+successfully",
@@ -235,7 +240,7 @@ async def delete_person(
 
     try:
         People(db).delete(str(person_id))
-        db.commit()
+        _commit(db)
         logger.info("Deleted person via web: %s", person_id)
         return RedirectResponse(
             url="/admin/people?success=Person+deleted+successfully",
@@ -244,6 +249,6 @@ async def delete_person(
     except Exception as exc:
         logger.warning("Failed to delete person %s: %s", person_id, exc)
         return RedirectResponse(
-            url=f"/admin/people?error={exc}",
+            url=f"/admin/people?error={quote_plus(str(exc))}",
             status_code=302,
         )

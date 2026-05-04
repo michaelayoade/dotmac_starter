@@ -1,6 +1,7 @@
 import logging
 import os
 from dataclasses import dataclass
+from ipaddress import ip_network
 
 from dotenv import load_dotenv
 
@@ -147,6 +148,67 @@ def validate_settings(s: Settings) -> list[ConfigWarning]:
                 critical=production,
             )
         )
+
+    if s.storage_backend not in {"local", "s3"}:
+        warnings.append(
+            ConfigWarning(
+                "STORAGE_BACKEND must be either 'local' or 's3'",
+                critical=True,
+            )
+        )
+
+    if s.storage_backend == "s3":
+        missing = [
+            name
+            for name, value in {
+                "S3_BUCKET": s.s3_bucket,
+                "S3_REGION": s.s3_region,
+                "S3_ACCESS_KEY": s.s3_access_key,
+                "S3_SECRET_KEY": s.s3_secret_key,
+            }.items()
+            if not value
+        ]
+        if missing:
+            warnings.append(
+                ConfigWarning(
+                    f"STORAGE_BACKEND=s3 is missing: {', '.join(missing)}",
+                    critical=production,
+                )
+            )
+
+    for cidr in os.getenv("TRUSTED_PROXY_CIDRS", "").split(","):
+        cidr = cidr.strip()
+        if not cidr:
+            continue
+        try:
+            ip_network(cidr, strict=False)
+        except ValueError:
+            warnings.append(
+                ConfigWarning(
+                    f"TRUSTED_PROXY_CIDRS contains invalid CIDR: {cidr}",
+                    critical=production,
+                )
+            )
+
+    for directive in s.static_cache_control.split(","):
+        directive = directive.strip()
+        if not directive:
+            warnings.append(
+                ConfigWarning(
+                    "STATIC_CACHE_CONTROL contains an empty directive",
+                    critical=production,
+                )
+            )
+            continue
+        if directive.lower().startswith("max-age="):
+            value = directive.split("=", 1)[1]
+            if not value.isdigit():
+                warnings.append(
+                    ConfigWarning(
+                        "STATIC_CACHE_CONTROL max-age must be an integer",
+                        critical=production,
+                    )
+                )
 
     return warnings
 

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.models.notification import Notification, NotificationType
 from app.schemas.notification import NotificationCreate
+from app.services.exceptions import NotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,12 @@ class NotificationService:
         notification.is_read = True
         notification.read_at = datetime.now(UTC)
         self.db.flush()
+        return notification
+
+    def mark_read_or_404(self, notification_id: UUID, recipient_id: UUID) -> Notification:
+        notification = self.mark_read(notification_id, recipient_id)
+        if notification is None:
+            raise NotFoundError("Notification not found")
         return notification
 
     def mark_all_read(self, recipient_id: UUID) -> int:

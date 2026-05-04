@@ -28,7 +28,18 @@ from app.models.auth import (
 from app.models.domain_settings import DomainSetting, SettingDomain
 from app.models.person import Person
 from app.models.rbac import Permission, PersonRole, Role, RolePermission
-from app.schemas.auth_flow import LoginResponse, LogoutResponse, TokenResponse
+from app.schemas.auth_flow import (
+    AvatarUploadResponse,
+    LoginResponse,
+    LogoutResponse,
+    MeResponse,
+    PasswordChangeResponse,
+    SessionInfoResponse,
+    SessionListResponse,
+    SessionRevokeResponse,
+    TokenResponse,
+)
+from app.services import avatar as avatar_service
 from app.services.common import coerce_uuid
 from app.services.response import ListResponseMixin
 from app.services.secrets import resolve_secret
@@ -352,8 +363,10 @@ def _load_rbac_claims(db: Session, person_id: str):
     return role_names, permission_keys
 
 
-def _primary_totp_method(db: Session, person_id: str) -> MFAMethod | None:
-    return db.scalars(
+def _primary_totp_method(
+    db: Session, person_id: str, *, for_update: bool = False
+) -> MFAMethod | None:
+    statement = (
         select(MFAMethod)
         .where(MFAMethod.person_id == coerce_uuid(person_id))
         .where(MFAMethod.method_type == MFAMethodType.totp)
@@ -361,7 +374,10 @@ def _primary_totp_method(db: Session, person_id: str) -> MFAMethod | None:
         .where(MFAMethod.enabled.is_(True))
         .where(MFAMethod.is_primary.is_(True))
         .limit(1)
-    ).first()
+    )
+    if for_update:
+        statement = statement.with_for_update()
+    return db.scalars(statement).first()
 
 
 def _verify_totp_once(method: MFAMethod, secret: str, code: str) -> bool:
@@ -421,6 +437,28 @@ def revoke_sessions_for_person(
         session.status = SessionStatus.revoked
         session.revoked_at = now
     return len(sessions)
+
+
+def _me_response(person: Person, auth: dict) -> MeResponse:
+    return MeResponse(
+        id=person.id,
+        first_name=person.first_name,
+        last_name=person.last_name,
+        display_name=person.display_name,
+        avatar_url=person.avatar_url,
+        email=person.email,
+        email_verified=person.email_verified,
+        phone=person.phone,
+        date_of_birth=person.date_of_birth,
+        gender=person.gender.value if person.gender else "unknown",
+        preferred_contact_method=person.preferred_contact_method.value
+        if person.preferred_contact_method
+        else None,
+        locale=person.locale,
+        timezone=person.timezone,
+        roles=auth.get("roles", []),
+        scopes=auth.get("scopes", []),
+    )
 
 
 class AuthFlow(ListResponseMixin):
@@ -581,7 +619,12 @@ class AuthFlow(ListResponseMixin):
         code: str,
         expected_person_id: str | None = None,
     ):
-        method = db.get(MFAMethod, coerce_uuid(method_id))
+        method = db.scalars(
+            select(MFAMethod)
+            .where(MFAMethod.id == coerce_uuid(method_id))
+            .with_for_update()
+            .limit(1)
+        ).first()
         if not method:
             raise HTTPException(status_code=404, detail="MFA method not found")
         if expected_person_id:
@@ -626,7 +669,7 @@ class AuthFlow(ListResponseMixin):
         if not person_id:
             raise HTTPException(status_code=401, detail="Invalid MFA token")
 
-        method = _primary_totp_method(db, str(person_id))
+        method = _primary_totp_method(db, str(person_id), for_update=True)
         if not method:
             raise HTTPException(status_code=404, detail="MFA method not found")
 
@@ -653,6 +696,7 @@ class AuthFlow(ListResponseMixin):
             .where(AuthSession.token_hash.in_(token_hashes))
             .where(AuthSession.status == SessionStatus.active)
             .where(AuthSession.revoked_at.is_(None))
+            .with_for_update()
             .limit(1)
         ).first()
         if not session:
@@ -661,6 +705,7 @@ class AuthFlow(ListResponseMixin):
                 .where(AuthSession.previous_token_hash.in_(token_hashes))
                 .where(AuthSession.status == SessionStatus.active)
                 .where(AuthSession.revoked_at.is_(None))
+                .with_for_update()
                 .limit(1)
             ).first()
             if reused:
@@ -748,6 +793,132 @@ class AuthFlow(ListResponseMixin):
             "path": _refresh_cookie_path(db),
             "max_age": _refresh_ttl_days(db) * 24 * 60 * 60,
         }
+
+    @staticmethod
+    def me_response(db: Session, auth: dict) -> MeResponse:
+        person = db.get(Person, coerce_uuid(auth["person_id"]))
+        if not person:
+            raise HTTPException(status_code=404, detail="User not found")
+        return _me_response(person, auth)
+
+    @staticmethod
+    def update_me_response(db: Session, auth: dict, payload) -> MeResponse:
+        person = db.get(Person, coerce_uuid(auth["person_id"]))
+        if not person:
+            raise HTTPException(status_code=404, detail="User not found")
+        for field, value in payload.model_dump(exclude_unset=True).items():
+            setattr(person, field, value)
+        db.flush()
+        return _me_response(person, auth)
+
+    @staticmethod
+    async def upload_avatar_response(db: Session, auth: dict, file) -> AvatarUploadResponse:
+        person = db.get(Person, coerce_uuid(auth["person_id"]))
+        if not person:
+            raise HTTPException(status_code=404, detail="User not found")
+        avatar_service.delete_avatar(person.avatar_url)
+        person.avatar_url = await avatar_service.save_avatar(file, str(person.id))
+        db.flush()
+        return AvatarUploadResponse(avatar_url=person.avatar_url)
+
+    @staticmethod
+    def delete_avatar(db: Session, auth: dict) -> None:
+        person = db.get(Person, coerce_uuid(auth["person_id"]))
+        if not person:
+            raise HTTPException(status_code=404, detail="User not found")
+        avatar_service.delete_avatar(person.avatar_url)
+        person.avatar_url = None
+        db.flush()
+
+    @staticmethod
+    def list_sessions_response(db: Session, auth: dict) -> SessionListResponse:
+        person_id = coerce_uuid(auth["person_id"])
+        sessions = db.scalars(
+            select(AuthSession)
+            .where(AuthSession.person_id == person_id)
+            .where(AuthSession.status == SessionStatus.active)
+            .where(AuthSession.revoked_at.is_(None))
+            .order_by(AuthSession.created_at.desc())
+        ).all()
+        current_session_id = auth.get("session_id")
+        return SessionListResponse(
+            sessions=[
+                SessionInfoResponse(
+                    id=s.id,
+                    status=s.status.value,
+                    ip_address=s.ip_address,
+                    user_agent=s.user_agent,
+                    created_at=s.created_at,
+                    last_seen_at=s.last_seen_at,
+                    expires_at=s.expires_at,
+                    is_current=(str(s.id) == current_session_id),
+                )
+                for s in sessions
+            ],
+            total=len(sessions),
+        )
+
+    @staticmethod
+    def revoke_session_response(
+        db: Session, auth: dict, session_id: str
+    ) -> SessionRevokeResponse:
+        session = db.scalars(
+            select(AuthSession)
+            .where(AuthSession.id == coerce_uuid(session_id))
+            .where(AuthSession.person_id == coerce_uuid(auth["person_id"]))
+            .limit(1)
+        ).first()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if session.status == SessionStatus.revoked:
+            raise HTTPException(status_code=400, detail="Session already revoked")
+        now = _now()
+        session.status = SessionStatus.revoked
+        session.revoked_at = now
+        db.flush()
+        return SessionRevokeResponse(revoked_at=now)
+
+    @staticmethod
+    def revoke_all_other_sessions_response(
+        db: Session, auth: dict
+    ) -> SessionRevokeResponse:
+        current_session_id = auth.get("session_id")
+        current_uuid = coerce_uuid(current_session_id) if current_session_id else None
+        sessions = db.scalars(
+            select(AuthSession)
+            .where(AuthSession.person_id == coerce_uuid(auth["person_id"]))
+            .where(AuthSession.status == SessionStatus.active)
+            .where(AuthSession.revoked_at.is_(None))
+            .where(AuthSession.id != current_uuid)
+        ).all()
+        now = _now()
+        for session in sessions:
+            session.status = SessionStatus.revoked
+            session.revoked_at = now
+        db.flush()
+        return SessionRevokeResponse(revoked_at=now, revoked_count=len(sessions))
+
+    @staticmethod
+    def change_password_response(db: Session, auth: dict, payload) -> PasswordChangeResponse:
+        credential = db.scalars(
+            select(UserCredential)
+            .where(UserCredential.person_id == coerce_uuid(auth["person_id"]))
+            .where(UserCredential.is_active.is_(True))
+            .limit(1)
+        ).first()
+        if not credential:
+            raise HTTPException(status_code=404, detail="No credentials found")
+        if not verify_password(payload.current_password, credential.password_hash):
+            raise HTTPException(status_code=401, detail="Current password is incorrect")
+        if payload.current_password == payload.new_password:
+            raise HTTPException(status_code=400, detail="New password must be different")
+        now = _now()
+        credential.password_hash = hash_password(payload.new_password)
+        credential.password_updated_at = now
+        credential.must_change_password = False
+        revoke_sessions_for_person(db, auth["person_id"])
+        db.flush()
+        return PasswordChangeResponse(changed_at=now)
 
     @staticmethod
     def _issue_tokens(db: Session, person_id: str, request: Request):

@@ -13,6 +13,10 @@ router = APIRouter(
 )
 
 
+def _commit(db: Session) -> None:
+    db.commit()
+
+
 @router.get("/{event_id}", response_model=AuditEventRead)
 def get_audit_event(event_id: str, db: Session = Depends(get_db)):
     return audit_service.audit_events.get(db, event_id)
@@ -62,4 +66,4 @@ def delete_audit_event(
     _admin: dict = Depends(require_role("admin")),
 ):
     audit_service.audit_events.delete(db, event_id)
-    db.commit()
+    _commit(db)

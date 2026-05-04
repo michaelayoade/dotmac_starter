@@ -8,7 +8,7 @@
 
 <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6">
     <form method="POST" action="/admin/people/create">
-        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token if request.state.csrf_token is defined else '' }}" />
+        {{ request.state.csrf_form | safe }}
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             {{ forms.text_input('first_name', 'First Name', required=true, placeholder='Enter first name') }}

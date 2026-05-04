@@ -85,7 +85,7 @@ def require_web_auth(
         ).all()
     )
     if "admin" not in roles:
-        raise HTTPException(status_code=403, detail="Forbidden")
+        raise WebAuthRedirect(next_url=request.url.path)
 
     return {
         "person_id": str(person_id),

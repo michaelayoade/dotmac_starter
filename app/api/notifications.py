@@ -15,14 +15,22 @@ from app.services.notification import NotificationService
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 
+def _commit(db: Session) -> None:
+    db.commit()
+
+
+def _commit_and_refresh(db: Session, item):
+    _commit(db)
+    db.refresh(item)
+    return item
+
+
 @router.post("", response_model=NotificationRead, status_code=status.HTTP_201_CREATED)
 def create_notification(
     payload: NotificationCreate,
     db: Session = Depends(get_db),
 ) -> NotificationRead:
-    svc = NotificationService(db)
-    record = svc.create(payload)
-    db.commit()
+    record = _commit_and_refresh(db, NotificationService(db).create(payload))
     return NotificationRead.model_validate(record)
 
 
@@ -67,13 +75,9 @@ def mark_notification_read(
     auth: dict = Depends(require_user_auth),
 ) -> NotificationRead:
     person_id = UUID(auth["person_id"])
-    svc = NotificationService(db)
-    record = svc.mark_read(notification_id, person_id)
-    if not record:
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=404, detail="Notification not found")
-    db.commit()
+    record = _commit_and_refresh(
+        db, NotificationService(db).mark_read_or_404(notification_id, person_id)
+    )
     return NotificationRead.model_validate(record)
 
 
@@ -85,5 +89,5 @@ def mark_all_read(
     person_id = UUID(auth["person_id"])
     svc = NotificationService(db)
     count = svc.mark_all_read(person_id)
-    db.commit()
+    _commit(db)
     return {"marked_read": count}

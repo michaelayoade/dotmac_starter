@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import quote_plus
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -214,6 +215,6 @@ async def delete_permission(
     except Exception as exc:
         logger.warning("Failed to delete permission %s: %s", permission_id, exc)
         return RedirectResponse(
-            url=f"/admin/permissions?error={exc}",
+            url=f"/admin/permissions?error={quote_plus(str(exc))}",
             status_code=302,
         )

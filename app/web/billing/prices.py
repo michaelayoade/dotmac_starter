@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import quote_plus
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -21,6 +22,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin/billing/prices", tags=["web-billing-prices"])
 
 PAGE_SIZE = 25
+
+
+def _commit(db: Session) -> None:
+    db.commit()
 
 
 def _base_context(
@@ -152,7 +157,7 @@ async def create_price_submit(
             is_active=data.get("is_active") == "on",
         )
         billing_service.prices.create(db, payload)
-        db.commit()
+        _commit(db)
         logger.info("Created price via web for product: %s", payload.product_id)
         return RedirectResponse(
             url="/admin/billing/prices?success=Price+created+successfully",
@@ -257,7 +262,7 @@ async def edit_price_submit(
             is_active="is_active" in data,
         )
         billing_service.prices.update(db, str(item_id), payload)
-        db.commit()
+        _commit(db)
         logger.info("Updated price via web: %s", item_id)
         return RedirectResponse(
             url=f"/admin/billing/prices/{item_id}?success=Price+updated+successfully",
@@ -296,7 +301,7 @@ async def delete_price(
 
     try:
         billing_service.prices.delete(db, str(item_id))
-        db.commit()
+        _commit(db)
         logger.info("Deleted price via web: %s", item_id)
         return RedirectResponse(
             url="/admin/billing/prices?success=Price+deleted+successfully",
@@ -305,6 +310,6 @@ async def delete_price(
     except Exception as exc:
         logger.warning("Failed to delete price %s: %s", item_id, exc)
         return RedirectResponse(
-            url=f"/admin/billing/prices?error={exc}",
+            url=f"/admin/billing/prices?error={quote_plus(str(exc))}",
             status_code=302,
         )

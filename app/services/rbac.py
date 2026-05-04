@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -28,6 +30,13 @@ class Roles(ListResponseMixin):
         self.db.add(role)
         self.db.flush()
         self.db.refresh(role)
+        return role
+
+    def create_with_permissions(
+        self, payload: RoleCreate, permission_ids: Sequence[str]
+    ) -> Role:
+        role = self.create(payload)
+        self.replace_permissions(role.id, permission_ids)
         return role
 
     def get(self, role_id: str):
@@ -66,6 +75,35 @@ class Roles(ListResponseMixin):
         self.db.flush()
         self.db.refresh(role)
         return role
+
+    def update_with_permissions(
+        self, role_id: str, payload: RoleUpdate, permission_ids: Sequence[str]
+    ) -> Role:
+        role = self.update(role_id, payload)
+        self.replace_permissions(role.id, permission_ids)
+        return role
+
+    def replace_permissions(self, role_id: object, permission_ids: Sequence[str]) -> None:
+        role_uuid = coerce_uuid(str(role_id))
+        existing = list(
+            self.db.scalars(
+                select(RolePermission).where(RolePermission.role_id == role_uuid)
+            ).all()
+        )
+        for link in existing:
+            self.db.delete(link)
+        self.db.flush()
+        role_permissions = RolePermissions(self.db)
+        for permission_id in permission_ids:
+            permission_uuid = coerce_uuid(permission_id)
+            if permission_uuid is None:
+                continue
+            role_permissions.create(
+                RolePermissionCreate(
+                    role_id=role_uuid,
+                    permission_id=permission_uuid,
+                )
+            )
 
     def delete(self, role_id: str):
         role = self.db.get(Role, coerce_uuid(role_id))

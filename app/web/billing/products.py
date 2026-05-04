@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import quote_plus
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -21,6 +22,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin/billing/products", tags=["web-billing-products"])
 
 PAGE_SIZE = 25
+
+
+def _commit(db: Session) -> None:
+    db.commit()
 
 
 def _base_context(
@@ -115,7 +120,7 @@ async def create_product_submit(
             is_active=data.get("is_active") == "on",
         )
         billing_service.products.create(db, payload)
-        db.commit()
+        _commit(db)
         logger.info("Created product via web: %s", payload.name)
         return RedirectResponse(
             url="/admin/billing/products?success=Product+created+successfully",
@@ -195,7 +200,7 @@ async def edit_product_submit(
             is_active="is_active" in data,
         )
         billing_service.products.update(db, str(item_id), payload)
-        db.commit()
+        _commit(db)
         logger.info("Updated product via web: %s", item_id)
         return RedirectResponse(
             url=f"/admin/billing/products/{item_id}?success=Product+updated+successfully",
@@ -225,7 +230,7 @@ async def delete_product(
 
     try:
         billing_service.products.delete(db, str(item_id))
-        db.commit()
+        _commit(db)
         logger.info("Deleted product via web: %s", item_id)
         return RedirectResponse(
             url="/admin/billing/products?success=Product+deleted+successfully",
@@ -234,6 +239,6 @@ async def delete_product(
     except Exception as exc:
         logger.warning("Failed to delete product %s: %s", item_id, exc)
         return RedirectResponse(
-            url=f"/admin/billing/products?error={exc}",
+            url=f"/admin/billing/products?error={quote_plus(str(exc))}",
             status_code=302,
         )

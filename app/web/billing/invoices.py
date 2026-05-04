@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import quote_plus
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -23,6 +24,10 @@ router = APIRouter(prefix="/admin/billing/invoices", tags=["web-billing-invoices
 PAGE_SIZE = 25
 
 INVOICE_STATUSES = ["draft", "open", "paid", "void", "uncollectible"]
+
+
+def _commit(db: Session) -> None:
+    db.commit()
 
 
 def _base_context(
@@ -190,7 +195,7 @@ async def edit_invoice_submit(
             is_active="is_active" in data,
         )
         billing_service.invoices.update(db, str(item_id), payload)
-        db.commit()
+        _commit(db)
         logger.info("Updated invoice via web: %s", item_id)
         return RedirectResponse(
             url=f"/admin/billing/invoices/{item_id}?success=Invoice+updated+successfully",
@@ -223,7 +228,7 @@ async def delete_invoice(
 
     try:
         billing_service.invoices.delete(db, str(item_id))
-        db.commit()
+        _commit(db)
         logger.info("Deleted invoice via web: %s", item_id)
         return RedirectResponse(
             url="/admin/billing/invoices?success=Invoice+deleted+successfully",
@@ -232,6 +237,6 @@ async def delete_invoice(
     except Exception as exc:
         logger.warning("Failed to delete invoice %s: %s", item_id, exc)
         return RedirectResponse(
-            url=f"/admin/billing/invoices?error={exc}",
+            url=f"/admin/billing/invoices?error={quote_plus(str(exc))}",
             status_code=302,
         )

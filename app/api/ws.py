@@ -6,6 +6,7 @@ import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.db import SessionLocal
 from app.services.auth_flow import decode_access_token
@@ -51,7 +52,7 @@ async def ws_notifications(websocket: WebSocket) -> None:
     Authenticate via Sec-WebSocket-Protocol header.
     """
     token = _extract_ws_token(websocket)
-    person_id_str = _authenticate_ws(token)
+    person_id_str = await run_in_threadpool(_authenticate_ws, token)
     if not person_id_str:
         await websocket.close(code=4001, reason="Unauthorized")
         return

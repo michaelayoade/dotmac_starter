@@ -70,9 +70,7 @@ class TestRateLimitMiddleware:
     def test_rate_limit_headers_present(self, mock_redis: MagicMock) -> None:
         """Rate limit response headers are present when Redis works."""
         mock_r = MagicMock()
-        mock_pipe = MagicMock()
-        mock_pipe.execute.return_value = [None, 0, None, None]  # count=0 (under limit)
-        mock_r.pipeline.return_value = mock_pipe
+        mock_r.eval.return_value = [1, 1]  # allowed, current count after this request
         mock_redis.return_value = mock_r
 
         fresh_app = FastAPI()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import quote_plus
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -25,6 +26,10 @@ router = APIRouter(
 PAGE_SIZE = 25
 
 VALUE_TYPES = ["boolean", "numeric", "string", "unlimited"]
+
+
+def _commit(db: Session) -> None:
+    db.commit()
 
 
 def _base_context(
@@ -141,7 +146,7 @@ async def create_entitlement_submit(
             else None,
         )
         billing_service.entitlements.create(db, payload)
-        db.commit()
+        _commit(db)
         logger.info("Created entitlement via web: %s", payload.feature_key)
         return RedirectResponse(
             url="/admin/billing/entitlements?success=Entitlement+created+successfully",
@@ -243,7 +248,7 @@ async def edit_entitlement_submit(
             else None,
         )
         billing_service.entitlements.update(db, str(item_id), payload)
-        db.commit()
+        _commit(db)
         logger.info("Updated entitlement via web: %s", item_id)
         return RedirectResponse(
             url=f"/admin/billing/entitlements/{item_id}?success=Entitlement+updated+successfully",
@@ -287,7 +292,7 @@ async def delete_entitlement(
 
     try:
         billing_service.entitlements.delete(db, str(item_id))
-        db.commit()
+        _commit(db)
         logger.info("Deleted entitlement via web: %s", item_id)
         return RedirectResponse(
             url="/admin/billing/entitlements?success=Entitlement+deleted+successfully",
@@ -296,6 +301,6 @@ async def delete_entitlement(
     except Exception as exc:
         logger.warning("Failed to delete entitlement %s: %s", item_id, exc)
         return RedirectResponse(
-            url=f"/admin/billing/entitlements?error={exc}",
+            url=f"/admin/billing/entitlements?error={quote_plus(str(exc))}",
             status_code=302,
         )

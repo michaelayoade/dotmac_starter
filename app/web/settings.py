@@ -21,6 +21,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin/settings", tags=["web-settings"])
 
 
+def _commit_and_refresh(db: Session, item):
+    db.commit()
+    db.refresh(item)
+    return item
+
+
 def _base_context(
     request: Request,
     db: Session,
@@ -135,8 +141,7 @@ async def edit_setting_submit(
         if "is_active" in data:
             setting.is_active = data["is_active"] == "on"
 
-        db.commit()
-        db.refresh(setting)
+        _commit_and_refresh(db, setting)
         logger.info("Updated setting via web: %s/%s", setting.domain.value, setting.key)
         return RedirectResponse(
             url="/admin/settings?success=Setting+updated+successfully",

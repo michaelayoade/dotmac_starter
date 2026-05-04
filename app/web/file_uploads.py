@@ -25,6 +25,10 @@ router = APIRouter(prefix="/admin/file-uploads", tags=["web-file-uploads"])
 PAGE_SIZE = 25
 
 
+def _commit(db: Session) -> None:
+    db.commit()
+
+
 def _base_context(
     request: Request,
     db: Session,
@@ -130,7 +134,7 @@ async def upload_submit(
             uploaded_by=person.id,
             category=category,
         )
-        db.commit()
+        _commit(db)
         logger.info(
             "Uploaded file via web: %s by %s", uploaded_file.filename, person.id
         )
@@ -169,7 +173,7 @@ async def delete_file_upload(
     try:
         svc = FileUploadService(db)
         svc.delete(file_id)
-        db.commit()
+        _commit(db)
         logger.info("Deleted file upload via web: %s", file_id)
         return RedirectResponse(
             url="/admin/file-uploads?success=File+deleted+successfully",

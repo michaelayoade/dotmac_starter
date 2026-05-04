@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import quote_plus
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -24,6 +25,10 @@ router = APIRouter(
 PAGE_SIZE = 25
 
 PAYMENT_METHOD_TYPES = ["card", "bank_account", "wallet", "other"]
+
+
+def _commit(db: Session) -> None:
+    db.commit()
 
 
 def _base_context(
@@ -138,7 +143,7 @@ async def delete_payment_method(
 
     try:
         billing_service.payment_methods.delete(db, str(item_id))
-        db.commit()
+        _commit(db)
         logger.info("Deleted payment method via web: %s", item_id)
         return RedirectResponse(
             url="/admin/billing/payment-methods?success=Payment+method+deleted+successfully",
@@ -147,6 +152,6 @@ async def delete_payment_method(
     except Exception as exc:
         logger.warning("Failed to delete payment method %s: %s", item_id, exc)
         return RedirectResponse(
-            url=f"/admin/billing/payment-methods?error={exc}",
+            url=f"/admin/billing/payment-methods?error={quote_plus(str(exc))}",
             status_code=302,
         )

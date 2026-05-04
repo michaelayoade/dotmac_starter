@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import quote_plus
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -243,6 +244,6 @@ async def delete_task(
     except Exception as exc:
         logger.warning("Failed to delete scheduled task %s: %s", task_id, exc)
         return RedirectResponse(
-            url=f"/admin/scheduler?error={exc}",
+            url=f"/admin/scheduler?error={quote_plus(str(exc))}",
             status_code=302,
         )

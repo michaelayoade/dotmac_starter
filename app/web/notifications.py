@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import quote_plus
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -22,6 +23,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin/notifications", tags=["web-notifications"])
 
 PAGE_SIZE = 25
+
+
+def _commit(db: Session) -> None:
+    db.commit()
 
 
 def _base_context(
@@ -110,7 +115,7 @@ async def mark_notification_read(
     try:
         result = svc.mark_read(notification_id, person.id)
         if result:
-            db.commit()
+            _commit(db)
             logger.info(
                 "Marked notification %s as read for user %s",
                 notification_id,
@@ -130,6 +135,6 @@ async def mark_notification_read(
             "Failed to mark notification %s as read: %s", notification_id, exc
         )
         return RedirectResponse(
-            url=f"/admin/notifications?error={exc}",
+            url=f"/admin/notifications?error={quote_plus(str(exc))}",
             status_code=302,
         )

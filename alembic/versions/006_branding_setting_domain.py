@@ -15,9 +15,19 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("ALTER TYPE settingdomain ADD VALUE IF NOT EXISTS 'branding'")
+    with op.get_context().autocommit_block():
+        op.execute("ALTER TYPE settingdomain ADD VALUE IF NOT EXISTS 'branding'")
+    op.execute(
+        "UPDATE domain_settings "
+        "SET domain = 'branding' "
+        "WHERE domain = 'scheduler' AND key = 'ui_branding'"
+    )
 
 
 def downgrade() -> None:
+    op.execute(
+        "UPDATE domain_settings "
+        "SET domain = 'scheduler' "
+        "WHERE domain = 'branding' AND key = 'ui_branding'"
+    )
     # PostgreSQL enum values cannot be removed safely without rebuilding the type.
-    pass

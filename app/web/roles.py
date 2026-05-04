@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import quote_plus
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -12,10 +13,9 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.models.rbac import Permission, Role, RolePermission
-from app.schemas.rbac import RoleCreate, RolePermissionCreate, RoleUpdate
+from app.schemas.rbac import RoleCreate, RoleUpdate
 from app.services.branding_context import load_branding_context
-from app.services.common import coerce_uuid
-from app.services.rbac import RolePermissions, Roles
+from app.services.rbac import Roles
 from app.templates import templates
 from app.web.deps import require_web_auth
 
@@ -125,21 +125,7 @@ async def create_role_submit(
             description=str(data["description"]) if data.get("description") else None,
             is_active=data.get("is_active") == "on",
         )
-        roles = Roles(db)
-        role_permissions = RolePermissions(db)
-        role = roles.create(payload)
-
-        # Assign permissions to the role
-        for perm_id in permission_ids:
-            perm_uuid = coerce_uuid(perm_id)
-            if perm_uuid is None:
-                continue
-            rp_payload = RolePermissionCreate(
-                role_id=role.id,
-                permission_id=perm_uuid,
-            )
-            role_permissions.create(rp_payload)
-
+        Roles(db).create_with_permissions(payload, [str(item) for item in permission_ids])
         _commit(db)
         logger.info("Created role via web: %s", payload.name)
         return RedirectResponse(
@@ -213,31 +199,9 @@ async def edit_role_submit(
             description=str(data["description"]) if data.get("description") else None,
             is_active="is_active" in data,
         )
-        roles = Roles(db)
-        role_permissions = RolePermissions(db)
-        roles.update(str(role_id), payload)
-
-        # Remove existing role permissions
-        existing_rps = list(
-            db.scalars(
-                select(RolePermission).where(RolePermission.role_id == role_id)
-            ).all()
+        Roles(db).update_with_permissions(
+            str(role_id), payload, [str(item) for item in permission_ids]
         )
-        for rp in existing_rps:
-            db.delete(rp)
-        db.flush()
-
-        # Re-add selected permissions
-        for perm_id in permission_ids:
-            perm_uuid = coerce_uuid(perm_id)
-            if perm_uuid is None:
-                continue
-            rp_payload = RolePermissionCreate(
-                role_id=role_id,
-                permission_id=perm_uuid,
-            )
-            role_permissions.create(rp_payload)
-
         _commit(db)
         logger.info("Updated role via web: %s", role_id)
         return RedirectResponse(
@@ -292,6 +256,6 @@ async def delete_role(
     except Exception as exc:
         logger.warning("Failed to delete role %s: %s", role_id, exc)
         return RedirectResponse(
-            url=f"/admin/roles?error={exc}",
+            url=f"/admin/roles?error={quote_plus(str(exc))}",
             status_code=302,
         )

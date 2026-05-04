@@ -10,16 +10,13 @@ from fastapi import (
     UploadFile,
     status,
 )
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_user_auth
-from app.models.rbac import PersonRole, Role
 from app.schemas.common import ListResponse
 from app.schemas.file_upload import FileUploadRead
-from app.services.common import coerce_uuid
 from app.services.exceptions import BadRequestError, NotFoundError
-from app.services.file_upload import FileUploadService
+from app.services.file_upload import FileUploadService, current_person_id
 
 router = APIRouter(
     prefix="/file-uploads",
@@ -27,25 +24,14 @@ router = APIRouter(
 )
 
 
-def _is_admin(db: Session, person_id: UUID) -> bool:
-    return (
-        db.scalars(
-            select(PersonRole)
-            .join(Role, PersonRole.role_id == Role.id)
-            .where(PersonRole.person_id == person_id)
-            .where(Role.name == "admin")
-            .where(Role.is_active.is_(True))
-            .limit(1)
-        ).first()
-        is not None
-    )
+def _commit(db: Session) -> None:
+    db.commit()
 
 
-def _current_person_id(auth: dict) -> UUID:
-    person_id = coerce_uuid(auth["person_id"])
-    if person_id is None:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    return person_id
+def _commit_and_refresh(db: Session, item):
+    _commit(db)
+    db.refresh(item)
+    return item
 
 
 def _to_http_error(exc: Exception) -> HTTPException:
@@ -66,19 +52,18 @@ async def upload_file(
     content = await file.read()
     svc = FileUploadService(db)
     try:
-        record = svc.upload(
+        record = svc.upload_for_actor(
+            actor_id=current_person_id(auth),
             content=content,
             filename=file.filename or "unknown",
             content_type=file.content_type or "application/octet-stream",
-            uploaded_by=_current_person_id(auth),
             category=category,
             entity_type=entity_type,
             entity_id=entity_id,
         )
     except BadRequestError as exc:
         raise _to_http_error(exc) from exc
-    db.commit()
-    db.refresh(record)
+    _commit_and_refresh(db, record)
     return FileUploadRead.model_validate(record)
 
 
@@ -88,15 +73,8 @@ def get_file_upload(
     auth: dict = Depends(require_user_auth),
     db: Session = Depends(get_db),
 ) -> FileUploadRead:
-    person_id = _current_person_id(auth)
     svc = FileUploadService(db)
-    record = svc.get_by_id(file_id)
-    if (
-        not record
-        or not record.is_active
-        or (not _is_admin(db, person_id) and record.uploaded_by != person_id)
-    ):
-        raise HTTPException(status_code=404, detail="File upload not found")
+    record = svc.get_for_actor(file_id, current_person_id(auth))
     return FileUploadRead.model_validate(record)
 
 
@@ -110,29 +88,13 @@ def list_file_uploads(
     auth: dict = Depends(require_user_auth),
     db: Session = Depends(get_db),
 ) -> ListResponse[FileUploadRead]:
-    person_id = _current_person_id(auth)
-    uploaded_by = None if _is_admin(db, person_id) else person_id
-    svc = FileUploadService(db)
-    items = svc.list_uploads(
-        uploaded_by=uploaded_by,
+    return FileUploadService(db).list_response_for_actor(
+        actor_id=current_person_id(auth),
         category=category,
         entity_type=entity_type,
         entity_id=entity_id,
         limit=limit,
         offset=offset,
-    )
-    total = svc.count(
-        uploaded_by=uploaded_by,
-        category=category,
-        entity_type=entity_type,
-        entity_id=entity_id,
-    )
-    return ListResponse(
-        items=[FileUploadRead.model_validate(i) for i in items],
-        count=len(items),
-        limit=limit,
-        offset=offset,
-        total=total,
     )
 
 
@@ -142,17 +104,9 @@ def delete_file_upload(
     auth: dict = Depends(require_user_auth),
     db: Session = Depends(get_db),
 ) -> None:
-    person_id = _current_person_id(auth)
     svc = FileUploadService(db)
-    record = svc.get_by_id(file_id)
-    if (
-        not record
-        or not record.is_active
-        or (not _is_admin(db, person_id) and record.uploaded_by != person_id)
-    ):
-        raise HTTPException(status_code=404, detail="File upload not found")
     try:
-        svc.delete(file_id)
+        svc.delete_for_actor(file_id, current_person_id(auth))
     except NotFoundError as exc:
         raise _to_http_error(exc) from exc
-    db.commit()
+    _commit(db)

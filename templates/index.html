@@ -2,10 +2,10 @@
 {% from "components/macros.html" import pagination, sortable_th, status_badge %}
 
 {% block content %}
-  {% set brand_name = brand.name | default("Starter Template") %}
-  {% set brand_tagline = brand.tagline | default("FastAPI starter", true) %}
-  {% set brand_logo_url = brand.logo_url | default("", true) %}
-  {% set brand_mark = brand.mark | default("ST") %}
+  {% set brand_name = brand.name if brand and brand.name else "Starter Template" %}
+  {% set brand_tagline = brand.tagline if brand and brand.tagline else "FastAPI starter" %}
+  {% set brand_logo_url = brand.logo_url if brand and brand.logo_url else "" %}
+  {% set brand_mark = brand.mark if brand and brand.mark else "ST" %}
   <main class="mx-auto max-w-5xl px-6 py-16 bg-noise bg-mesh min-h-screen">
     <div class="stagger-in rounded-3xl bg-white p-10 shadow-xl shadow-slate-200/40 dark:bg-slate-800 dark:shadow-slate-900/40 card-hover">
       <div class="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">

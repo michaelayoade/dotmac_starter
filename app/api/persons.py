@@ -9,12 +9,19 @@ from app.services import person as person_service
 router = APIRouter(prefix="/people", tags=["people"])
 
 
+def _commit(db: Session) -> None:
+    db.commit()
+
+
+def _commit_and_refresh(db: Session, item):
+    _commit(db)
+    db.refresh(item)
+    return item
+
+
 @router.post("", response_model=PersonRead, status_code=status.HTTP_201_CREATED)
 def create_person(payload: PersonCreate, db: Session = Depends(get_db)):
-    person = person_service.People(db).create(payload)
-    db.commit()
-    db.refresh(person)
-    return person
+    return _commit_and_refresh(db, person_service.People(db).create(payload))
 
 
 @router.get("/{person_id}", response_model=PersonRead)
@@ -40,13 +47,10 @@ def list_people(
 
 @router.patch("/{person_id}", response_model=PersonRead)
 def update_person(person_id: str, payload: PersonUpdate, db: Session = Depends(get_db)):
-    person = person_service.People(db).update(person_id, payload)
-    db.commit()
-    db.refresh(person)
-    return person
+    return _commit_and_refresh(db, person_service.People(db).update(person_id, payload))
 
 
 @router.delete("/{person_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_person(person_id: str, db: Session = Depends(get_db)):
     person_service.People(db).delete(person_id)
-    db.commit()
+    _commit(db)

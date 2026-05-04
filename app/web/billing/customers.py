@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import quote_plus
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -21,6 +22,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin/billing/customers", tags=["web-billing-customers"])
 
 PAGE_SIZE = 25
+
+
+def _commit(db: Session) -> None:
+    db.commit()
 
 
 def _base_context(
@@ -123,7 +128,7 @@ async def create_customer_submit(
             is_active=data.get("is_active") == "on",
         )
         billing_service.customers.create(db, payload)
-        db.commit()
+        _commit(db)
         logger.info("Created customer via web: %s", payload.email)
         return RedirectResponse(
             url="/admin/billing/customers?success=Customer+created+successfully",
@@ -220,7 +225,7 @@ async def edit_customer_submit(
             is_active="is_active" in data,
         )
         billing_service.customers.update(db, str(item_id), payload)
-        db.commit()
+        _commit(db)
         logger.info("Updated customer via web: %s", item_id)
         return RedirectResponse(
             url=f"/admin/billing/customers/{item_id}?success=Customer+updated+successfully",
@@ -250,7 +255,7 @@ async def delete_customer(
 
     try:
         billing_service.customers.delete(db, str(item_id))
-        db.commit()
+        _commit(db)
         logger.info("Deleted customer via web: %s", item_id)
         return RedirectResponse(
             url="/admin/billing/customers?success=Customer+deleted+successfully",
@@ -259,6 +264,6 @@ async def delete_customer(
     except Exception as exc:
         logger.warning("Failed to delete customer %s: %s", item_id, exc)
         return RedirectResponse(
-            url=f"/admin/billing/customers?error={exc}",
+            url=f"/admin/billing/customers?error={quote_plus(str(exc))}",
             status_code=302,
         )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from urllib.parse import quote_plus
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -24,6 +25,10 @@ router = APIRouter(prefix="/admin/billing/coupons", tags=["web-billing-coupons"]
 PAGE_SIZE = 25
 
 COUPON_DURATIONS = ["once", "repeating", "forever"]
+
+
+def _commit(db: Session) -> None:
+    db.commit()
 
 
 def _base_context(
@@ -135,7 +140,7 @@ async def create_coupon_submit(
             redeem_by=redeem_by_val,
         )
         billing_service.coupons.create(db, payload)
-        db.commit()
+        _commit(db)
         logger.info("Created coupon via web: %s", payload.code)
         return RedirectResponse(
             url="/admin/billing/coupons?success=Coupon+created+successfully",
@@ -218,7 +223,7 @@ async def edit_coupon_submit(
             redeem_by=redeem_by_val,
         )
         billing_service.coupons.update(db, str(item_id), payload)
-        db.commit()
+        _commit(db)
         logger.info("Updated coupon via web: %s", item_id)
         return RedirectResponse(
             url=f"/admin/billing/coupons/{item_id}?success=Coupon+updated+successfully",
@@ -249,7 +254,7 @@ async def delete_coupon(
 
     try:
         billing_service.coupons.delete(db, str(item_id))
-        db.commit()
+        _commit(db)
         logger.info("Deleted coupon via web: %s", item_id)
         return RedirectResponse(
             url="/admin/billing/coupons?success=Coupon+deleted+successfully",
@@ -258,6 +263,6 @@ async def delete_coupon(
     except Exception as exc:
         logger.warning("Failed to delete coupon %s: %s", item_id, exc)
         return RedirectResponse(
-            url=f"/admin/billing/coupons?error={exc}",
+            url=f"/admin/billing/coupons?error={quote_plus(str(exc))}",
             status_code=302,
         )

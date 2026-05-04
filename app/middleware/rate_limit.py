@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 import time
 from ipaddress import (
     IPv4Address,
@@ -38,6 +39,18 @@ AUTH_PATHS: set[str] = {
 }
 
 _TRUSTED_PROXY_CIDRS = os.getenv("TRUSTED_PROXY_CIDRS", "")
+
+_SLIDING_WINDOW_LUA = """
+redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, tonumber(ARGV[1]) - tonumber(ARGV[2]))
+local current = redis.call('ZCARD', KEYS[1])
+if current >= tonumber(ARGV[3]) then
+    redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))
+    return {0, current}
+end
+redis.call('ZADD', KEYS[1], ARGV[1], ARGV[4])
+redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))
+return {1, current + 1}
+"""
 
 
 def _load_trusted_proxy_networks() -> list[IPv4Network | IPv6Network]:
@@ -158,19 +171,20 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         client_ip = _get_client_ip(request)
         key = f"rate_limit:{clean_path}:{client_ip}"
         now = time.time()
+        member = f"{now}:{secrets.token_hex(8)}"
 
         try:
-            pipe = r.pipeline()  # type: ignore[union-attr]
-            # Remove expired entries
-            pipe.zremrangebyscore(key, 0, now - window_seconds)
-            # Count remaining entries
-            pipe.zcard(key)
-            # Add current request
-            pipe.zadd(key, {str(now): now})
-            # Set expiry on the key
-            pipe.expire(key, window_seconds)
-            results = pipe.execute()
-            current_count = results[1]
+            allowed, current_count = r.eval(  # type: ignore[union-attr]
+                _SLIDING_WINDOW_LUA,
+                1,
+                key,
+                now,
+                window_seconds,
+                max_requests,
+                member,
+            )
+            allowed = bool(int(allowed))
+            current_count = int(current_count)
         except Exception:
             if _is_auth_path(clean_path):
                 logger.warning("Rate limiter: Redis error on auth path %s", clean_path)
@@ -181,7 +195,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             logger.debug("Rate limiter: Redis error, allowing request")
             return await call_next(request)  # type: ignore[call-arg]
 
-        if current_count >= max_requests:
+        if not allowed:
             retry_after = str(window_seconds)
             logger.warning(
                 "Rate limit exceeded: %s on %s (%d/%d)",
@@ -203,7 +217,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         response: Response = await call_next(request)  # type: ignore[call-arg]
 
         # Add rate limit headers for transparency
-        remaining = max(0, max_requests - current_count - 1)
+        remaining = max(0, max_requests - current_count)
         response.headers["X-RateLimit-Limit"] = str(max_requests)
         response.headers["X-RateLimit-Remaining"] = str(remaining)
         response.headers["X-RateLimit-Reset"] = str(int(now + window_seconds))

@@ -9,8 +9,12 @@ from app.services import settings_api as settings_service
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 
-def _commit(db: Session, item):
+def _commit(db: Session) -> None:
     db.commit()
+
+
+def _commit_and_refresh(db: Session, item):
+    _commit(db)
     db.refresh(item)
     return item
 
@@ -40,7 +44,7 @@ def list_auth_settings(
 def upsert_auth_setting(
     key: str, payload: DomainSettingUpdate, db: Session = Depends(get_db)
 ):
-    return _commit(db, settings_service.upsert_auth_setting(db, key, payload))
+    return _commit_and_refresh(db, settings_service.upsert_auth_setting(db, key, payload))
 
 
 @router.get(
@@ -79,7 +83,7 @@ def list_audit_settings(
 def upsert_audit_setting(
     key: str, payload: DomainSettingUpdate, db: Session = Depends(get_db)
 ):
-    return _commit(db, settings_service.upsert_audit_setting(db, key, payload))
+    return _commit_and_refresh(db, settings_service.upsert_audit_setting(db, key, payload))
 
 
 @router.get(
@@ -118,7 +122,7 @@ def list_scheduler_settings(
 def upsert_scheduler_setting(
     key: str, payload: DomainSettingUpdate, db: Session = Depends(get_db)
 ):
-    return _commit(db, settings_service.upsert_scheduler_setting(db, key, payload))
+    return _commit_and_refresh(db, settings_service.upsert_scheduler_setting(db, key, payload))
 
 
 @router.get(

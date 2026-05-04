@@ -23,7 +23,7 @@
             {% endif %}
 
             <form method="POST" action="/admin/login" class="space-y-4">
-                <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token if request.state.csrf_token is defined else '' }}" />
+                {{ request.state.csrf_form | safe }}
                 <input type="hidden" name="next" value="{{ next_url if next_url else '/admin' }}" />
                 <div>
                     <label for="username" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Username</label>
