@@ -4,15 +4,30 @@ WORKDIR /app
 
 ENV POETRY_VIRTUALENVS_CREATE=false
 
+ARG TARGETARCH
+ARG TAILWIND_VERSION=v3.4.17
+
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir poetry \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir poetry \
     && poetry install --only main --no-root --no-interaction --no-ansi
 
 COPY . .
 
-# Build Tailwind CSS in the builder so the runtime image does not need
-# the vendored Tailwind binary.
-RUN ./bin/tailwindcss -i static/css/input.css -o static/css/styles.css --minify
+# Build Tailwind CSS in the builder with an architecture-specific standalone binary.
+RUN case "${TARGETARCH:-amd64}" in \
+        amd64) tailwind_arch="x64" ;; \
+        arm64) tailwind_arch="arm64" ;; \
+        *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL \
+        "https://github.com/tailwindlabs/tailwindcss/releases/download/${TAILWIND_VERSION}/tailwindcss-linux-${tailwind_arch}" \
+        -o /tmp/tailwindcss \
+    && chmod +x /tmp/tailwindcss \
+    && /tmp/tailwindcss -i static/css/input.css -o static/css/styles.css --minify \
+    && rm /tmp/tailwindcss
 
 FROM python:3.12-slim
 

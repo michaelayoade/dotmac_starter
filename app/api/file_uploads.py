@@ -5,7 +5,6 @@ from fastapi import (
     Depends,
     File,
     Form,
-    HTTPException,
     Query,
     UploadFile,
     status,
@@ -15,7 +14,6 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db, require_user_auth
 from app.schemas.common import ListResponse
 from app.schemas.file_upload import FileUploadRead
-from app.services.exceptions import BadRequestError, NotFoundError
 from app.services.file_upload import FileUploadService, current_person_id
 
 router = APIRouter(
@@ -34,12 +32,6 @@ def _commit_and_refresh(db: Session, item):
     return item
 
 
-def _to_http_error(exc: Exception) -> HTTPException:
-    if isinstance(exc, NotFoundError):
-        return HTTPException(status_code=404, detail=str(exc))
-    return HTTPException(status_code=400, detail=str(exc))
-
-
 @router.post("", response_model=FileUploadRead, status_code=status.HTTP_201_CREATED)
 async def upload_file(
     file: UploadFile = File(...),
@@ -51,18 +43,15 @@ async def upload_file(
 ) -> FileUploadRead:
     content = await file.read()
     svc = FileUploadService(db)
-    try:
-        record = svc.upload_for_actor(
-            actor_id=current_person_id(auth),
-            content=content,
-            filename=file.filename or "unknown",
-            content_type=file.content_type or "application/octet-stream",
-            category=category,
-            entity_type=entity_type,
-            entity_id=entity_id,
-        )
-    except BadRequestError as exc:
-        raise _to_http_error(exc) from exc
+    record = svc.upload_for_actor(
+        actor_id=current_person_id(auth),
+        content=content,
+        filename=file.filename or "unknown",
+        content_type=file.content_type or "application/octet-stream",
+        category=category,
+        entity_type=entity_type,
+        entity_id=entity_id,
+    )
     _commit_and_refresh(db, record)
     return FileUploadRead.model_validate(record)
 
@@ -105,8 +94,5 @@ def delete_file_upload(
     db: Session = Depends(get_db),
 ) -> None:
     svc = FileUploadService(db)
-    try:
-        svc.delete_for_actor(file_id, current_person_id(auth))
-    except NotFoundError as exc:
-        raise _to_http_error(exc) from exc
+    svc.delete_for_actor(file_id, current_person_id(auth))
     _commit(db)

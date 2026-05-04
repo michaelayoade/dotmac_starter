@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
@@ -9,7 +9,6 @@ from app.schemas.scheduler import (
     ScheduledTaskUpdate,
 )
 from app.services import scheduler as scheduler_service
-from app.services.exceptions import BadRequestError, NotFoundError
 
 router = APIRouter(prefix="/scheduler", tags=["scheduler"])
 
@@ -24,12 +23,6 @@ def _commit_and_refresh(db: Session, result):
     return result
 
 
-def _to_http_error(exc: Exception) -> HTTPException:
-    if isinstance(exc, NotFoundError):
-        return HTTPException(status_code=404, detail=str(exc))
-    return HTTPException(status_code=400, detail=str(exc))
-
-
 @router.get("/tasks", response_model=ListResponse[ScheduledTaskRead])
 def list_scheduled_tasks(
     enabled: bool | None = None,
@@ -39,12 +32,9 @@ def list_scheduled_tasks(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
-    try:
-        return scheduler_service.ScheduledTasks(db).list_response(
-            enabled, order_by, order_dir, limit, offset
-        )
-    except BadRequestError as exc:
-        raise _to_http_error(exc) from exc
+    return scheduler_service.ScheduledTasks(db).list_response(
+        enabled, order_by, order_dir, limit, offset
+    )
 
 
 @router.post(
@@ -53,38 +43,26 @@ def list_scheduled_tasks(
     status_code=status.HTTP_201_CREATED,
 )
 def create_scheduled_task(payload: ScheduledTaskCreate, db: Session = Depends(get_db)):
-    try:
-        task = scheduler_service.ScheduledTasks(db).create(payload)
-    except BadRequestError as exc:
-        raise _to_http_error(exc) from exc
+    task = scheduler_service.ScheduledTasks(db).create(payload)
     return _commit_and_refresh(db, task)
 
 
 @router.get("/tasks/{task_id}", response_model=ScheduledTaskRead)
 def get_scheduled_task(task_id: str, db: Session = Depends(get_db)):
-    try:
-        return scheduler_service.ScheduledTasks(db).get(task_id)
-    except NotFoundError as exc:
-        raise _to_http_error(exc) from exc
+    return scheduler_service.ScheduledTasks(db).get(task_id)
 
 
 @router.patch("/tasks/{task_id}", response_model=ScheduledTaskRead)
 def update_scheduled_task(
     task_id: str, payload: ScheduledTaskUpdate, db: Session = Depends(get_db)
 ):
-    try:
-        task = scheduler_service.ScheduledTasks(db).update(task_id, payload)
-    except (BadRequestError, NotFoundError) as exc:
-        raise _to_http_error(exc) from exc
+    task = scheduler_service.ScheduledTasks(db).update(task_id, payload)
     return _commit_and_refresh(db, task)
 
 
 @router.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_scheduled_task(task_id: str, db: Session = Depends(get_db)):
-    try:
-        scheduler_service.ScheduledTasks(db).delete(task_id)
-    except NotFoundError as exc:
-        raise _to_http_error(exc) from exc
+    scheduler_service.ScheduledTasks(db).delete(task_id)
     _commit(db)
 
 
@@ -95,10 +73,7 @@ def refresh_schedule():
 
 @router.post("/tasks/{task_id}/enqueue", status_code=status.HTTP_202_ACCEPTED)
 def enqueue_scheduled_task(task_id: str, db: Session = Depends(get_db)):
-    try:
-        task = scheduler_service.ScheduledTasks(db).get(task_id)
-    except NotFoundError as exc:
-        raise _to_http_error(exc) from exc
+    task = scheduler_service.ScheduledTasks(db).get(task_id)
     return scheduler_service.enqueue_task(
         task.task_name, task.args_json or [], task.kwargs_json or {}
     )

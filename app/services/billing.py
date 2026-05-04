@@ -2,7 +2,7 @@ import logging
 from typing import Any
 
 from sqlalchemy import Select, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.billing import (
     Coupon,
@@ -375,7 +375,9 @@ class SubscriptionItems(ListResponseMixin):
         limit: int,
         offset: int,
     ) -> tuple[list[SubscriptionItem], int]:
-        query = select(SubscriptionItem)
+        query = select(SubscriptionItem).options(
+            selectinload(SubscriptionItem.price)
+        )
         if subscription_id:
             query = query.where(
                 SubscriptionItem.subscription_id == coerce_uuid(subscription_id)
@@ -442,7 +444,7 @@ class Invoices(ListResponseMixin):
         limit: int,
         offset: int,
     ) -> tuple[list[Invoice], int]:
-        query = select(Invoice)
+        query = select(Invoice).options(selectinload(Invoice.customer))
         if customer_id:
             query = query.where(Invoice.customer_id == coerce_uuid(customer_id))
         if subscription_id:

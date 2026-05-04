@@ -2,14 +2,14 @@ import os
 import sys
 import uuid
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
 from types import ModuleType
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 from jose import jwt
-from sqlalchemy import DateTime, create_engine
-from sqlalchemy.orm import Mapped, mapped_column, sessionmaker, DeclarativeBase
+from sqlalchemy import DateTime, create_engine, select
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 
@@ -260,17 +260,16 @@ def auth_session(db_session, person):
 @pytest.fixture()
 def auth_token(db_session, person, auth_session):
     """Create a valid JWT token for authenticated requests."""
-    role = db_session.query(Role).filter(Role.name == "admin").first()
+    role = db_session.scalars(select(Role).where(Role.name == "admin")).first()
     if not role:
         role = Role(name="admin", description="Administrator role")
         db_session.add(role)
         db_session.flush()
-    existing = (
-        db_session.query(PersonRole)
-        .filter(PersonRole.person_id == person.id)
-        .filter(PersonRole.role_id == role.id)
-        .first()
-    )
+    existing = db_session.scalars(
+        select(PersonRole)
+        .where(PersonRole.person_id == person.id)
+        .where(PersonRole.role_id == role.id)
+    ).first()
     if not existing:
         db_session.add(PersonRole(person_id=person.id, role_id=role.id))
         db_session.commit()

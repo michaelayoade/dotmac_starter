@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import os
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -43,6 +44,8 @@ from app.services import avatar as avatar_service
 from app.services.common import coerce_uuid
 from app.services.response import ListResponseMixin
 from app.services.secrets import resolve_secret
+
+logger = logging.getLogger(__name__)
 
 PASSWORD_CONTEXT = CryptContext(
     schemes=["pbkdf2_sha256", "bcrypt"],
@@ -709,14 +712,23 @@ class AuthFlow(ListResponseMixin):
                 .limit(1)
             ).first()
             if reused:
+                if len(token_hashes) > 1 and reused.previous_token_hash == token_hashes[1]:
+                    logger.warning(
+                        "Matched legacy previous refresh-token hash for session %s",
+                        reused.id,
+                    )
                 reused.status = SessionStatus.revoked
                 reused.revoked_at = _now()
                 db.flush()
                 raise HTTPException(
                     status_code=401,
                     detail="Refresh token reuse detected",
-                )
+            )
             raise HTTPException(status_code=401, detail="Invalid refresh token")
+        if len(token_hashes) > 1 and session.token_hash == token_hashes[1]:
+            logger.warning(
+                "Matched legacy refresh-token hash for session %s", session.id
+            )
         expires_at = _as_utc(session.expires_at)
         if expires_at and expires_at <= _now():
             session.status = SessionStatus.expired
